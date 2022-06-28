@@ -1,4 +1,4 @@
-# Network Dissection Lite in PyTorch
+# Video Network Dissection in PyTorch
 
 ## Introduction
 This repository is a light version of [NetDissect](https://github.com/CSAILVision/NetDissect), which contains the demo code for the work [Network Dissection: Quantifying Interpretability of Deep Visual Representations](http://netdissect.csail.mit.edu). This code is written in pytorch and python3.6, tested on Ubuntu 16.04. The processing speed is greatly improved compared to the original version: It only takes about 20 mins for netdissecting the Resnet18, and about 2 hours for DenseNet161, and no complex shell commands. Note that the dissection result will be slightly different to the original version due to the faster upsampling function used. Please install [Pytorch](http://pytorch.org/) in python36 and [Torchvision](https://github.com/pytorch/vision) first.
