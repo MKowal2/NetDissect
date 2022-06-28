@@ -52,7 +52,6 @@ class FeatureOperator:
                     skip = False
             if skip:
                 return wholefeatures, maxfeatures
-
         num_batches = (len(loader.indexes) + loader.batch_size - 1) / loader.batch_size
         for batch_idx,batch in enumerate(loader.tensor_batches(bgr_mean=self.mean)):
             del features_blobs[:]
@@ -92,6 +91,7 @@ class FeatureOperator:
             end_idx = min((batch_idx+1)*settings.BATCH_SIZE, len(loader.indexes))
             for i, feat_batch in enumerate(features_blobs):
                 if len(feat_batch.shape) == 4:
+                    # Write in feature (or max feature) to variable at proper index (start to end idx)
                     wholefeatures[i][start_idx:end_idx] = feat_batch
                     maxfeatures[i][start_idx:end_idx] = np.max(np.max(feat_batch,3),2)
                 elif len(feat_batch.shape) == 3:
@@ -107,6 +107,7 @@ class FeatureOperator:
         if savepath and os.path.exists(qtpath):
             return np.load(qtpath)
         print("calculating quantile threshold")
+        # TODO: Understand this line
         quant = vecquantile.QuantileVector(depth=features.shape[1], seed=1)
         start_time = time.time()
         last_batch_time = start_time
@@ -120,6 +121,7 @@ class FeatureOperator:
             batch = features[i:i + batch_size]
             batch = np.transpose(batch, axes=(0, 2, 3, 1)).reshape(-1, features.shape[1])
             quant.add(batch)
+        # TODO: Understand this line
         ret = quant.readout(1000)[:, int(1000 * (1-settings.QUANTILE)-1)]
         if savepath:
             np.save(qtpath, ret)
@@ -187,7 +189,6 @@ class FeatureOperator:
                             tally_cat += data.labelcat[scalar]
                             tally_both[unit_id, scalar] += len(indexes)
                         tally_units_cat[unit_id] += len(indexes) * (tally_cat > 0)
-
 
     def tally(self, features, threshold, savepath=''):
         csvpath = os.path.join(settings.OUTPUT_FOLDER, savepath)

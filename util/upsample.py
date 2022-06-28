@@ -22,7 +22,6 @@ def upsampleL(fieldmap, activation_data, reduction=1, shape=None,
                 fieldmap, activation_data.shape[1:], reduction)
     if scaleshape is not None:
         iy, ix = full_arange(scaleshape)
-        # TODO: consider treaing each point as a center of a pixel
         iy *= shape[0] / scaleshape[0]
         ix *= shape[1] / scaleshape[1]
     else:
