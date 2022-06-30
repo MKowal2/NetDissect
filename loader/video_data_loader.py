@@ -441,7 +441,7 @@ class SegmentationPrefetcher:
     '''
     def __init__(self, segmentation, split=None, randomize=False,
             segmentation_shape=None, categories=None, once=False,
-            start=None, end=None, batch_size=4, ahead=4, thread=False, single_thread=False):
+            start=None, end=None, batch_size=4, ahead=4, thread=False):
         '''
         Constructor arguments:
         segmentation: The AbstractSegmentation to load.
@@ -461,17 +461,12 @@ class SegmentationPrefetcher:
         self.once = once
         self.batch_size = batch_size
         self.ahead = ahead
-        self.single_thread = single_thread
         # Initialize the multiprocessing pool
-        if self.single_thread:
-            n_procs = 1
-        else:
-            n_procs = int(cpu_count()/2)
+        n_procs = cpu_count()
         if thread:
             self.pool = ThreadPool(processes=n_procs)
         else:
             original_sigint_handler = setup_sigint()
-
             self.pool = Pool(processes=n_procs, initializer=setup_sigint)
             restore_sigint(original_sigint_handler)
         # Prefilter the image indexes of interest

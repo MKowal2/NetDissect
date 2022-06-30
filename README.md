@@ -16,6 +16,10 @@ This repository is a light version of [NetDissect](https://github.com/CSAILVisio
     ./script/dlzoo_example.sh
 ```
 
+* To create the video-broden dataset, first download the following datasets:
+  * DTDB, A2D, ... (TBD)
+  * Then, generate the optical flow maps using RAFT from PyTorch, by running ```python src_video/generate_flow.py```
+
 Note that AlexNet models work with 227x227 image input, while VGG, ResNet, GoogLeNet works with 224x224 image input.
 
 ## Run NetDissect in PyTorch

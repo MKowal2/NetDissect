@@ -23,9 +23,7 @@ class FeatureOperator:
         if not os.path.exists(settings.OUTPUT_FOLDER):
             os.makedirs(os.path.join(settings.OUTPUT_FOLDER, 'image'))
         self.data = SegmentationData(settings.DATA_DIRECTORY, categories=settings.CATAGORIES)
-        self.loader = SegmentationPrefetcher(self.data,categories=['image'],once=True,
-                                             batch_size=settings.BATCH_SIZE,ahead=settings.FO_AHEAD,
-                                             single_thread=settings.SINGLE_THREAD)
+        self.loader = SegmentationPrefetcher(self.data,categories=['image'],once=True,batch_size=settings.BATCH_SIZE)
         self.mean = [109.5388,118.6897,124.6901]
 
     def feature_extraction(self, model=None, memmap=True):
