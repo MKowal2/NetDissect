@@ -64,7 +64,7 @@ if __name__ == '__main__':
     print('CREATING NEW DATASET OF SIZE {}'.format(image_size))
     print('CREATING NEW LABELS OF SIZE {}'.format(seg_size))
     print('Loading source segmentations.')
-    # categories = ['dynamics', 'flow']
+    # categories = ['dynamics', 'data_processing']
     categories = ['dynamics']
     dtdb = dtdb_dataset.DTDB(data_root='/home/m2kowal/data/DTDB',
                              categories=categories)

@@ -3,9 +3,9 @@
 Optical Flow: Predicting movement with the RAFT model
 =====================================================
 
-Optical flow is the task of predicting movement between two images, usually two
-consecutive frames of a video. Optical flow models take two images as input, and
-predict a flow: the flow indicates the displacement of every single pixel in the
+Optical data_processing is the task of predicting movement between two images, usually two
+consecutive frames of a video. Optical data_processing models take two images as input, and
+predict a data_processing: the data_processing indicates the displacement of every single pixel in the
 first image, and maps it to its corresponding pixel in the second image. Flows
 are (2, H, W)-dimensional tensors, where the first axis corresponds to the
 predicted horizontal and vertical displacements.
@@ -142,7 +142,7 @@ print(f"shape = {img1_batch.shape}, dtype = {img1_batch.dtype}")
 
 
 ####################################
-# Estimating Optical flow using RAFT
+# Estimating Optical data_processing using RAFT
 # ----------------------------------
 # We will use our RAFT implementation from
 # :func:`~torchvision.models.optical_flow.raft_large`, which follows the same
@@ -170,7 +170,7 @@ print(f"length = {len(list_of_flows)} = number of iterations of the model")
 # are only interested in the final predicted flows (they are the most acccurate
 # ones), so we will just retrieve the last item in the list.
 #
-# As described above, a flow is a tensor with dimensions (2, H, W) (or (N, 2, H,
+# As described above, a data_processing is a tensor with dimensions (2, H, W) (or (N, 2, H,
 # W) for batches of flows) where each entry corresponds to the horizontal and
 # vertical displacement of each pixel from the first image to the second image.
 # Note that the predicted flows are in "pixel" unit, they are not normalized
@@ -185,8 +185,8 @@ print(f"min = {predicted_flows.min()}, max = {predicted_flows.max()}")
 # Visualizing predicted flows
 # ---------------------------
 # Torchvision provides the :func:`~torchvision.utils.flow_to_image` utlity to
-# convert a flow into an RGB image. It also supports batches of flows.
-# each "direction" in the flow will be mapped to a given RGB color. In the
+# convert a data_processing into an RGB image. It also supports batches of flows.
+# each "direction" in the data_processing will be mapped to a given RGB color. In the
 # images below, pixels with similar colors are assumed by the model to be moving
 # in similar directions. The model is properly able to predict the movement of
 # the ball and the player. Note in particular the different predicted direction
@@ -225,7 +225,7 @@ plot(grid)
 #     write_jpeg(flow_img, output_folder + f"predicted_flow_{i}.jpg")
 
 ####################################
-# Once the .jpg flow images are saved, you can convert them into a video or a
+# Once the .jpg data_processing images are saved, you can convert them into a video or a
 # GIF using ffmpeg with e.g.:
 #
-# ffmpeg -f image2 -framerate 30 -i predicted_flow_%d.jpg -loop -1 flow.gif
+# ffmpeg -f image2 -framerate 30 -i predicted_flow_%d.jpg -loop -1 data_processing.gif
