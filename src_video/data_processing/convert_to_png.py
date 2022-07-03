@@ -14,16 +14,17 @@ def convert(args):
     for vid_id in tqdm(data):
         if len(data[vid_id]) < 8:
             continue
-
+        fps = data[vid_id]['fps']
         data_in_path = os.path.join(args.data_root) + '/BY_DYNAMIC_FINAL/' + data[vid_id]['dyn_subset'].upper() + '/' \
                        +data[vid_id]['dynamic'].split('_g')[0] + '/' + data[vid_id]['dynamic']
         save_dir = data_out_path + '/' + data[vid_id]['dynamic'].split('.')[0]
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
-        command = 'ffmpeg -hide_banner -loglevel error -i "{}" -r 30 -q:v 1 -vf scale=224:224 "{}/%06d.png"'.format(data_in_path, save_dir)
+        command = 'ffmpeg -hide_banner -loglevel error -i "{}" -r {} -q:v 1 "{}/%06d.png"'.format(data_in_path, fps, save_dir)
+
+        # SCALED VERSION
+        # command = 'ffmpeg -hide_banner -loglevel error -i "{}" -r 30 -q:v 1 -vf scale=320:-1 "{}/%06d.png"'.format(data_in_path, save_dir)
         os.system(command)
-
-
 
 
 if __name__ == '__main__':

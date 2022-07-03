@@ -1,12 +1,16 @@
 import glob
-import torch.utils.data as data
-import json
+import os.path
 from PIL import Image
+import torch.utils.data as data
+import csv
+import numpy as np
+import torch
+import matplotlib.pyplot as plt
+import torchvision.transforms.functional as F
+import torchvision.transforms as tf
 from torch import Tensor, nn
 from typing import Tuple
-import torchvision.transforms.functional as F
-import torch
-from tqdm import tqdm
+
 
 class OpticalFlow(nn.Module):
     def forward(self, img1: Tensor, img2: Tensor) -> Tuple[Tensor, Tensor]:
@@ -36,33 +40,28 @@ class OpticalFlow(nn.Module):
             "The images are rescaled to ``[-1.0, 1.0]``."
         )
 
-def get_dtdb_data(data_root):
-    correspondance_path = data_root + '/app_dyn_correspondance.json'
-    with open(correspondance_path) as file:
-        data = json.load(file)
-    return data
-
-class DTDB(data.Dataset):
-    def __init__(self, data_root):
+class A2D(data.Dataset):
+    def __init__(self, data_root='/home/m2kowal/data/a2d_dataset'):
         # need to replace this with datalist of all images, with corresponding styles and class labels
         self.data_root = data_root
         self.data = self.get_data()
         self.transforms = OpticalFlow()
 
+
     def get_data(self):
+        annotation_path = os.path.join(self.data_root, 'Release/videoset.csv')
+        with open(annotation_path, 'r') as f:
+            annotations = list(csv.reader(f))
+
         print('Constructing paired data list...')
         data = []
-        videos = glob.glob(self.data_root + '/frames/*')
-        for i, vid_path in enumerate(tqdm(videos)):
-            frames = glob.glob(vid_path + '/*')
-            for frame_id in range(1, int(len(frames))):
-                frame1_path = vid_path + "/{:06d}.png".format(frame_id)
-                frame2_path = vid_path + "/{:06d}.png".format(frame_id+1)
-                data.append({'video_id': vid_path,
-                             'frame1': frame1_path,
-                             'frame2': frame2_path})
-            # if i == 20:
-            #     break
+        for idx, video in enumerate(annotations):
+            for frame_id in range(1, int(video[-3])):
+                frame1_path = os.path.join(self.data_root + '/frames',video[0]) + "/{:05d}.png".format(frame_id)
+                frame2_path = os.path.join(self.data_root + '/frames',video[0]) + "/{:05d}.png".format(frame_id+1)
+                data.append({'video_id': video[0],
+                    'frame1': frame1_path,
+                    'frame2': frame2_path})
 
         return data
 

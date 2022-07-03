@@ -4,6 +4,7 @@ import sys
 import os
 import cv2
 from tqdm import tqdm
+import matplotlib.pyplot as plt
 
 def get_vid_info(filename):
     video = cv2.VideoCapture(filename)
@@ -16,7 +17,19 @@ def get_vid_info(filename):
 
     return duration, frame_count, fps, (height, width)
 
-def gen_dtdb_json(data_path):
+def get_img_info(dir):
+    frames = glob.glob(dir + '/*')
+    video = cv2.VideoCapture(dir)
+
+    duration = video.get(cv2.CAP_PROP_POS_MSEC)
+    frame_count = video.get(cv2.CAP_PROP_FRAME_COUNT)
+    width = video.get(cv2.CAP_PROP_FRAME_WIDTH)
+    height = video.get(cv2.CAP_PROP_FRAME_HEIGHT)
+    fps = video.get(cv2.CAP_PROP_FPS)
+
+    return duration, frame_count, fps, (height, width)
+
+def gen_dtdb_json(data_path, use_img=True):
 
 
     # file locations
@@ -43,8 +56,13 @@ def gen_dtdb_json(data_path):
                     dyn_subset_cap = 'TRAIN'
 
                 cls = dyn_label.split('_g')[0]
-                vid_path = data_root + 'BY_DYNAMIC_FINAL/' + dyn_subset_cap + '/' + cls + '/' + dyn_label
-                duration, frame_count, fps, size = get_vid_info(vid_path)
+
+                if not use_img:
+                    vid_path = data_root + 'BY_DYNAMIC_FINAL/' + dyn_subset_cap + '/' + cls + '/' + dyn_label
+                    duration, frame_count, fps, size = get_vid_info(vid_path)
+                else:
+                    vid_path = data_root + 'frames/' + dyn_label.split('.')[0]
+                    duration, frame_count, fps, size = get_img_info(vid_path)
                 if not os.path.exists(vid_path):
                     print('Video doesnt exist: {}'.format(vid_path))
                     continue
@@ -80,3 +98,6 @@ def gen_dtdb_json(data_path):
     with open(data_root + 'app_dyn_correspondance.json', 'w') as f:
         json.dump(vid_dict, f)
 
+
+
+gen_dtdb_json('/home/m2kowal/data/DTDB', use_img=True)
