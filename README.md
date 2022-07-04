@@ -1,5 +1,18 @@
+# NEW README ADDITIONS
 # Video Network Dissection in PyTorch
 
+* To create the video-broden dataset, first download the following datasets:
+  * DTDB, A2D, ... (TBD)
+  * Extract the frames of A2D using the given code from their readme file
+  * Extract the frames of DTDB using the script ```src_video/data_processing/convert_to_png.py```
+  * Then, generate the optical flow maps using RAFT from PyTorch, by running ```python src_video/generate_flow.py --dataset dtdb)```
+and replace dtdb with all dataset names (see arguments in generate_flow.py for more details)
+
+
+
+# OLD README
+
+# Network Dissection in PyTorch
 ## Introduction
 This repository is a light version of [NetDissect](https://github.com/CSAILVision/NetDissect), which contains the demo code for the work [Network Dissection: Quantifying Interpretability of Deep Visual Representations](http://netdissect.csail.mit.edu). This code is written in pytorch and python3.6, tested on Ubuntu 16.04. The processing speed is greatly improved compared to the original version: It only takes about 20 mins for netdissecting the Resnet18, and about 2 hours for DenseNet161, and no complex shell commands. Note that the dissection result will be slightly different to the original version due to the faster upsampling function used. Please install [Pytorch](http://pytorch.org/) in python36 and [Torchvision](https://github.com/pytorch/vision) first.
 
@@ -15,10 +28,6 @@ This repository is a light version of [NetDissect](https://github.com/CSAILVisio
     ./script/dlbroden.sh
     ./script/dlzoo_example.sh
 ```
-
-* To create the video-broden dataset, first download the following datasets:
-  * DTDB, A2D, ... (TBD)
-  * Then, generate the optical flow maps using RAFT from PyTorch, by running ```python src_video/generate_flow.py```
 
 Note that AlexNet models work with 227x227 image input, while VGG, ResNet, GoogLeNet works with 224x224 image input.
 
