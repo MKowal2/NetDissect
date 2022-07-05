@@ -100,4 +100,4 @@ def gen_dtdb_json(data_path, use_img=True):
 
 
 
-gen_dtdb_json('/home/m2kowal/data/DTDB', use_img=True)
+# gen_dtdb_json('/home/m2kowal/data/DTDB', use_img=True)

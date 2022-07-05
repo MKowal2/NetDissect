@@ -63,7 +63,13 @@ def debug_flow_bin(verbose=True):
             plt.show()
 
 
-def bin_flow(path):
+def bin_flow(path, magnitude_bins=[0.0, 0.5, 1.0, 2],
+             angle_bins=[0.0,3.14159/4,3.14159/2,3*3.14159/4, 3.14159,5*3.14159/4,6 *3.14159 / 4, 7 * 3.14159 / 4, 2 * 3.14159]):
+    '''
+    Input: path to optical flow saved as npy file with shape 2xHxW (x-y pixel-wise flow)
+    Output: HxW binned flow map where 1x,2x,3x,...8x corresponds to 45 angle partitions (starting from +ve x axis)
+            and the ones column corresponds to magnitudes of flow with bins [0, 0.5, 1, 2]
+    '''
     flow = np.load(path)
 
     # 1) convert to magnitude and angle
@@ -74,9 +80,8 @@ def bin_flow(path):
     theta = np.where(theta < 0, 2 * np.pi + theta, theta)
 
     # 2) bin based on angle (8 bins) and magnitude (3 bins)
-    magnitude_bins = np.array([0.0, 0.5, 1.0, 2])
-    angle_bins = np.array(
-        [0.0, np.pi / 4, np.pi / 2, 3 * np.pi / 4, np.pi, 5 * np.pi / 4, 6 * np.pi / 4, 7 * np.pi / 4, 2 * np.pi])
+    magnitude_bins = np.array(magnitude_bins)
+    angle_bins = np.array(angle_bins)
     binned_magnitude = np.digitize(r, magnitude_bins) - 1
     binned_angle = np.digitize(theta, angle_bins)
 
@@ -87,3 +92,5 @@ def bin_flow(path):
 
 # debug_flow_bin()
 
+# flow = bin_flow('/home/m2kowal/data/DTDB/frames/Rotary_motion_g5_c8/000050_flow.npy')
+# print(flow)
