@@ -6,6 +6,7 @@ import numpy as np
 import colorname
 import dtdb_utils
 from data_processing.bin_flow import bin_flow
+from data_processing.bin_flow import flow_names1
 from loadseg import AbstractSegmentation
 from PIL import Image
 def get_dtdb_data(data_root):
@@ -96,9 +97,26 @@ class DTDB(AbstractSegmentation):
         '''Returns the filename for the nth dataset image.'''
         return self.path_labels[i]['path']
 
-    def size(self):
+    def video_size(self):
         '''Returns the number of images in this dataset.'''
         return len(self.data)
+
+    def img_size(self):
+        '''Returns the number of images in this dataset.'''
+        return len(self.path_labels)
+
+    def all_names(self, category, j):
+        if j == 0:
+            return []
+        if category == 'color':
+            return [colorname.color_names[j - 1] + '-c']
+        if category == 'flow':
+            return [flow_names1[j] + '-f']
+        if category == 'dynamic':
+            return [self.dynamics[j]]
+        if category == 'appearance':
+            return [self.appearances[j]]
+        return []
 
 def wants(what, option):
     if option is None:

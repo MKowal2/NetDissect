@@ -5,6 +5,34 @@ from PIL import Image
 import matplotlib.pyplot as plt
 from scipy import stats
 
+# english names for the 25 directions of optical flow
+flow_names1 = {
+    11: 'rightupslow',
+    12: 'rightupmedium',
+    13: 'rightupfast',
+    21: 'uprightslow',
+    22: 'uprightmedium',
+    23: 'uprightfast',
+    31: 'upleftslow',
+    32: 'upleftmedium',
+    33: 'upleftfast',
+    41: 'leftupslow',
+    42: 'leftupmedium',
+    43: 'leftupfast',
+    51: 'leftdownslow',
+    52: 'leftdownmedium',
+    53: 'leftdownfast',
+    61: 'downleftslow',
+    62: 'downleftmedium',
+    63: 'downleftfast',
+    71: 'downrightslow',
+    72: 'downrightmedium',
+    73: 'downrightfast',
+    81: 'rightdownslow',
+    82: 'rightdownmedium',
+    83: 'rightdownfast',
+}
+
 
 def debug_flow_bin(verbose=True):
     flow_paths = [
@@ -63,8 +91,11 @@ def debug_flow_bin(verbose=True):
             plt.show()
 
 
+# def bin_flow(path, magnitude_bins=[0.0, 0.5, 1.0, 2],
+#              angle_bins=[0.0,3.14159/4,3.14159/2,3*3.14159/4, 3.14159,5*3.14159/4,6 *3.14159 / 4, 7 * 3.14159 / 4, 2 * 3.14159]):
 def bin_flow(path, magnitude_bins=[0.0, 0.5, 1.0, 2],
-             angle_bins=[0.0,3.14159/4,3.14159/2,3*3.14159/4, 3.14159,5*3.14159/4,6 *3.14159 / 4, 7 * 3.14159 / 4, 2 * 3.14159]):
+                 angle_bins=[0.0, np.pi / 4, np.pi / 2, 3 * np.pi / 4, np.pi, 5 * np.pi / 4, 6 * np.pi / 4,
+                             7 * np.pi / 4, 2 * np.pi]):
     '''
     Input: path to optical flow saved as npy file with shape 2xHxW (x-y pixel-wise flow)
     Output: HxW binned flow map where 1x,2x,3x,...8x corresponds to 45 angle partitions (starting from +ve x axis)
@@ -83,7 +114,7 @@ def bin_flow(path, magnitude_bins=[0.0, 0.5, 1.0, 2],
     magnitude_bins = np.array(magnitude_bins)
     angle_bins = np.array(angle_bins)
     binned_magnitude = np.digitize(r, magnitude_bins) - 1
-    binned_angle = np.digitize(theta, angle_bins)
+    binned_angle = np.digitize(theta, angle_bins).clip(0,8)
 
     # Compute binned flow by base 10 for each angle, +1 for each magnitude level. Output values: [0,11,12,13,21,22,...,81,82,83]
     binned_flow = np.where(binned_magnitude == 0, 0, binned_angle * 10 + binned_magnitude)
