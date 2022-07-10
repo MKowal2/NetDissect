@@ -69,8 +69,8 @@ def all_dataset_segmentations(data_sets, test_limit=None):
             j += 1
             if j % 10000 == 0:
                 print('{}/{} Completed'.format(j, total_imgs))
-            if j == 300:
-                break
+            # if j == 300:
+            #     break
 
 def truncate_range(data, limit):
     '''For testing, if limit is not None, limits data by slicing it.'''
@@ -161,7 +161,7 @@ def hashed_float(s):
     '''Hashes a string to a float in the range [0, 1).'''
     import hashlib, struct
     #TODO: fix this it is broken from the change of using md5 library
-    [number] = struct.unpack(">Q", hashlib.md5(s).digest()[:8])
+    [number] = struct.unpack(">Q", hashlib.md5(s.encode('utf-8')).digest()[:8])
     return number / (2.0 ** 64)  # python will constant-fold this denominator.
 
 
@@ -230,9 +230,7 @@ def safezoom(array, ratio, output=None, order=0):
     if array.shape[0] == 1:
         if output is not None:
             output = output[0,...]
-        print('need zoom here')
-        result = zoom(array[0,...], ratio[1:],
-                output=output, order=order)
+        result = zoom(array[0,...], ratio[1:],output=output, order=order)
         if output is None:
             output = result[numpy.newaxis]
     else:
@@ -280,7 +278,6 @@ def save_segmentation(seg, imagedir, dataset, filename, category, translation):
         #             (category, channel + 1), filename)
         fn = filename[:-4] + '_flow.png'
         result.append(os.path.join(dataset, fn))
-        print('need imsave here!!')
         im.save(os.path.join(imagedir, dataset, fn))
     return result
 

@@ -8,7 +8,9 @@ from PIL import Image
 def unify(data_sets, directory, size=None, segmentation_size=None, crop=False,
         splits=None, min_frequency=None, min_coverage=None,
         synonyms=None, test_limit=None, single_process=False, verbose=False):
-
+    print('1. Trim videos temporally!')
+    print('2. Video-level statistics!')
+    exit()
     # create directory
     ensure_dir(directory)
     ensure_dir(os.path.join(directory, 'videos'))
@@ -336,6 +338,24 @@ def translate_segmentation(record, directory, mapping, size,
                 imagedir, dataset, fn, cat, mapping[(dataset, cat)]))
     return result
 
+
+def cumulative_splits(splits):
+    '''Converts [0.8, 0.1, 0.1] to [0.8, 0.9, 1.0]'''
+    if splits is None:
+        return [('train', 1.0)]  # Default to just one split.
+    result = []
+    c = 0.0
+    for name, s in splits.items():
+        c += s
+        result.append((name, c))
+    # Eliminate any fp rounding problem: round last split up to 1.0
+    if result[-1][1] < 1.0 - len(result) * sys.float_info.epsilon:
+        raise ValueError('splits must add to 1.0, but %s add to %s' % (
+            repr(splits), result[-1][1]))
+    result[-1] = (result[-1][0], 1.0)
+    return result
+
+
 if __name__ == '__main__':
     # general imports
     import argparse
@@ -345,7 +365,7 @@ if __name__ == '__main__':
     import os
 
     # dataset imports
-    # TODO: build dataloaders for each dataset individually
+    # TODO: build A2D dataloader
     import dtdb_dataset
     import a2d_dataset
 
@@ -356,6 +376,10 @@ if __name__ == '__main__':
             '--size',
             type=int, default=224,
             help='pixel size for input videos')
+    parser.add_argument(
+            '--single_proc',
+            type=bool, default=False,
+            help='Whether to use multi_proc')
     args = parser.parse_args()
 
     image_size = (args.size, args.size)
@@ -377,4 +401,4 @@ if __name__ == '__main__':
             size=image_size, segmentation_size=seg_size,
             directory=('dataset/video_broden1_%d' % args.size),
             synonyms=None,
-            min_frequency=10, min_coverage=0.5, single_process=True,verbose=True)
+            min_frequency=10, min_coverage=0.5, single_process=False,verbose=True)
