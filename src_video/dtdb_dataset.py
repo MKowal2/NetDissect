@@ -18,13 +18,20 @@ def get_dtdb_data(data_root):
 
     return data
 
-def filter_videos(data_root, data, min_video_frame_length):
-    print('Filtering out DTDB videos with less than {} frames...'.format(min_video_frame_length+1))
+def filter_videos(data_root, data, min_video_frame_length, center_crop):
+    if center_crop is not None:
+        print('Temporally center cropping data to {} frames...'.format(center_crop))
+    else:
+        print('Filtering out DTDB videos with less than {} frames...'.format(min_video_frame_length))
     # turn data into list for iterators
     list_data = []
     new_data = data.copy()
     # filter out videos of length < min_video_frame_length
     num_removed_videos = 0
+
+    if center_crop is not None:
+        half_clip_length = int(center_crop/2)
+
     for vid in data:
         info = data[vid]
 
@@ -37,9 +44,19 @@ def filter_videos(data_root, data, min_video_frame_length):
             if app_label == 'Sliding':
                 app_label = 'Sliding_gate'
 
-            if length > min_video_frame_length:
+            if center_crop is not None:
+                if length > center_crop+1:
+                    middle_frame_idx = int(len(paths)/2)
+                    start_frame_idx = middle_frame_idx - half_clip_length
+                    end_frame_idx = middle_frame_idx + half_clip_length
+                    for i in range(start_frame_idx, end_frame_idx):
+                        list_data.append({'path': paths[i], 'dynamic': dyn_label, 'appearance': app_label, 'video': paths[i].split('/')[-2]})
+                        # list_data += paths[start_frame_idx:end_frame_idx]
+                else:
+                    num_removed_videos += 1
+            elif length > min_video_frame_length:
                 for path in paths:
-                    list_data.append({'path':path, 'dynamic': dyn_label, 'appearance':app_label})
+                    list_data.append({'path':path, 'dynamic': dyn_label, 'appearance':app_label, 'video':path.split('/')[-2]})
             else:
                 num_removed_videos += 1
 
@@ -49,18 +66,19 @@ def filter_videos(data_root, data, min_video_frame_length):
             new_data.pop(vid)
 
     print('{} videos removed'.format(num_removed_videos))
+    print('{} total frames'.format(len(list_data)))
     return list_data, new_data
 
 
 # class DTDB(data.Dataset):
 class DTDB(AbstractSegmentation):
-    def __init__(self, data_root, categories, min_video_frame_length = 63):
+    def __init__(self, data_root, categories, min_video_frame_length=100,center_crop=128):
         # need to replace this with datalist of all images, with corresponding styles and class labels
         self.data_root = data_root
 
         # data is a dict of all info, path_labels is list of all frames
         self.data = get_dtdb_data(self.data_root)
-        self.path_labels, self.data = filter_videos(self.data_root, self.data, min_video_frame_length)
+        self.path_labels, self.data = filter_videos(self.data_root, self.data, min_video_frame_length, center_crop)
         self.dynamics = ['-']+ sorted([y.split('/')[-1] for y in glob.glob(self.data_root + '/BY_DYNAMIC_FINAL/TRAIN/*')])
         self.appearances = ['-']+ sorted([y.split('/')[-1] for y in glob.glob(self.data_root + '/BY_APPEARANCE_FINAL/TRAIN/*')])
         self.dynamics_map = dict((t, i) for i, t in enumerate(self.dynamics))
@@ -69,7 +87,7 @@ class DTDB(AbstractSegmentation):
 
     @classmethod
     def resolve_segmentation(cls, metadata, categories=None):
-        filename, dyn_numbers, app_numbers = metadata
+        filename, dyn_numbers, app_numbers, video_name = metadata
         result = {}
         if wants('dynamics', categories):
             result['dynamic'] = dyn_numbers
@@ -87,11 +105,11 @@ class DTDB(AbstractSegmentation):
 
     def metadata(self, i):
         '''Returns an object that can be used to create all segmentations.'''
-        filename, dynamic, appearance = self.path_labels[i]['path'], self.path_labels[i]['dynamic'], self.path_labels[i]['appearance']
+        filename, dynamic, appearance, video_name = self.path_labels[i]['path'], self.path_labels[i]['dynamic'], self.path_labels[i]['appearance'], self.path_labels[i]['video']
         # need to change to list for multi-labeled videos
         dyn_numbers = [self.dynamics_map[dynamic]]
         app_numbers = [self.appearance_map[appearance]]
-        return filename, dyn_numbers, app_numbers
+        return filename, dyn_numbers, app_numbers, video_name
 
     def filename(self, i):
         '''Returns the filename for the nth dataset image.'''

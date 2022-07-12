@@ -7,10 +7,7 @@ from PIL import Image
 
 def unify(data_sets, directory, size=None, segmentation_size=None, crop=False,
         splits=None, min_frequency=None, min_coverage=None,
-        synonyms=None, test_limit=None, single_process=False, verbose=False):
-    print('1. Trim videos temporally!')
-    print('2. Video-level statistics!')
-    exit()
+        synonyms=None, test_limit=None, single_process=False, verbose=False, debug=False):
     # create directory
     ensure_dir(directory)
     ensure_dir(os.path.join(directory, 'videos'))
@@ -19,7 +16,7 @@ def unify(data_sets, directory, size=None, segmentation_size=None, crop=False,
     # coverage  = total portion of images covered by each label
     frequency, coverage = gather_label_statistics(
             data_sets, test_limit, single_process,
-            segmentation_size, crop, verbose)
+            segmentation_size, crop, verbose, debug)
     # Phase 2: Sort, collapse, and filter labels
     labnames, syns = normalize_labels(data_sets, frequency, coverage, synonyms)
     report_aliases(directory, labnames, data_sets, frequency, verbose)
@@ -36,7 +33,7 @@ def unify(data_sets, directory, size=None, segmentation_size=None, crop=False,
 
 
 def gather_label_statistics(data_sets, test_limit, single_process,
-        segmentation_size, crop, verbose):
+        segmentation_size, crop, verbose, debug):
     '''
     Phase 1 of unification.  Counts label statistics.
     '''
@@ -45,12 +42,13 @@ def gather_label_statistics(data_sets, test_limit, single_process,
         segmentation_size=segmentation_size,
         crop=crop,
         verbose=verbose),
-            all_dataset_segmentations(data_sets, test_limit),
+            all_dataset_segmentations(data_sets, test_limit, debug=debug),
             single_process=single_process,
             verbose=verbose)
+
+    # todo: video frequency and coverage - can we calculate this from the image frequency / coverage?
     # Add them up
     frequency, coverage = (sum_histogram(d) for d in zip(*stats))
-    # TODO: also, blacklist images that have insufficient labled pixels
     return frequency, coverage
 
 def count_label_statistics(record, segmentation_size, crop, verbose):
@@ -61,7 +59,7 @@ def count_label_statistics(record, segmentation_size, crop, verbose):
       coverage[(dataset, category, label)] = p, for portion of pixels covered
     '''
     dataset, index, seg_class, fn, md = record
-
+    video_name = md[-1]
     if verbose:
         print( 'Counting #%d %s %s' % (index, dataset, os.path.dirname(fn)))
 
@@ -70,13 +68,13 @@ def count_label_statistics(record, segmentation_size, crop, verbose):
     freq = {}
     coverage = {}
 
-    # TODO: implement video statistics along with image statistics
-
     # calculate the frequency and coverage of
     for category, seg in full_seg.items():
         if seg is None:
             continue
         dims = len(numpy.shape(seg))
+        freq['video_name'] = video_name
+        coverage['video_name'] = video_name
         if dims <= 1:
             for label in (seg if dims else (seg,)):
                 key = (dataset, category, int(label))
@@ -323,6 +321,7 @@ def translate_segmentation(record, directory, mapping, size,
     imagedir = os.path.join(directory, 'videos')
     ensure_dir(os.path.join(imagedir, dataset))
     ensure_dir(os.path.join(imagedir, dataset, video_name))
+    # todo: only save images from centercropped video
     fn = save_image(jpg, imagedir, dataset, os.path.join(video_name,basename))
     result = {
             'image': os.path.join(dataset, fn),
@@ -392,7 +391,8 @@ if __name__ == '__main__':
     categories = ['dynamics', 'appearance', 'color', 'flow']
     dtdb = dtdb_dataset.DTDB(data_root='/home/m2kowal/data/DTDB',
                              categories=categories,
-                             min_video_frame_length = 63)
+                             min_video_frame_length=100,
+                             center_crop=128)
 
     data = OrderedDict(dtdb=dtdb)
 
@@ -401,4 +401,5 @@ if __name__ == '__main__':
             size=image_size, segmentation_size=seg_size,
             directory=('dataset/video_broden1_%d' % args.size),
             synonyms=None,
-            min_frequency=10, min_coverage=0.5, single_process=False,verbose=True)
+            min_frequency=10, min_coverage=0.5, single_process=True,verbose=True,
+            debug=True)

@@ -42,11 +42,15 @@ def sum_histogram(histogram_list):
     '''Adds histogram dictionaries elementwise.'''
     result = {}
     for d in histogram_list:
+        video_name = d['video_name']
         for k, v in d.items():
-            if k not in result:
-                result[k] = v
-            else:
-                result[k] += v
+            if not k == 'video_name':
+                #todo: video statistics
+                exit()
+                if k not in result:
+                    result[k] = v
+                else:
+                    result[k] += v
     return result
 
 def setup_sigint():
@@ -55,7 +59,7 @@ def setup_sigint():
 def restore_sigint(original):
     signal.signal(signal.SIGINT, original)
 
-def all_dataset_segmentations(data_sets, test_limit=None):
+def all_dataset_segmentations(data_sets, test_limit=None, debug=False):
     '''
     Returns an iterator for metadata over all segmentations
     for all images in all the datasets.  The iterator iterates over
@@ -69,8 +73,9 @@ def all_dataset_segmentations(data_sets, test_limit=None):
             j += 1
             if j % 10000 == 0:
                 print('{}/{} Completed'.format(j, total_imgs))
-            # if j == 300:
-            #     break
+            if debug:
+                if j == 300:
+                    break
 
 def truncate_range(data, limit):
     '''For testing, if limit is not None, limits data by slicing it.'''
