@@ -9,6 +9,25 @@ from data_processing.bin_flow import bin_flow
 from data_processing.bin_flow import flow_names1
 from loadseg import AbstractSegmentation
 from PIL import Image
+
+no_flow_classes = [
+    'Chaotic_motion',
+    'Dominant_non-rigid',
+    'Explosion_Divergence',
+    'Geyser',
+    'Rotary_side_view',
+    'Scintillation',
+    'Stochastic_motion',
+    'Superimposed_motions',
+    'Superimposed_translation_and_stochastic',
+    'Turbulance',
+    'Underconstrained_aperture_problem',
+    'Underconstrained_blinking',
+    'Underconstrained_flicker',
+    'Wavy_motion'
+]
+
+
 def get_dtdb_data(data_root):
     correspondance_path = data_root + '/app_dyn_correspondance.json'
     if not os.path.exists(correspondance_path):
@@ -87,19 +106,18 @@ class DTDB(AbstractSegmentation):
 
     @classmethod
     def resolve_segmentation(cls, metadata, categories=None):
-        filename, dyn_numbers, app_numbers, video_name = metadata
+        filename, dyn_numbers, app_numbers, dynamic_cls, video_name = metadata
         result = {}
         if wants('dynamics', categories):
             result['dynamic'] = dyn_numbers
         if wants('appearance', categories):
             result['appearance'] = app_numbers
-        if wants('flow', categories):
+        if wants('flow', categories) and dynamic_cls not in no_flow_classes:
             result['flow'] = bin_flow(filename.replace('.png', '_flow.npy'))
         if wants('color', categories):
             result['color'] = colorname.label_major_colors(np.asarray(Image.open(filename))) + 1
 
         # return a dictionary of segmentation maps (or [1] for video label) and shape of video
-        # TODO: retrieve shape from video, maybe build into app_dyn_correspondance.json to save time
         shape = result['color'].shape[-2:] if wants('color', categories) else (1, 1)
         return result, shape
 
@@ -109,7 +127,7 @@ class DTDB(AbstractSegmentation):
         # need to change to list for multi-labeled videos
         dyn_numbers = [self.dynamics_map[dynamic]]
         app_numbers = [self.appearance_map[appearance]]
-        return filename, dyn_numbers, app_numbers, video_name
+        return filename, dyn_numbers, app_numbers, dynamic, video_name
 
     def filename(self, i):
         '''Returns the filename for the nth dataset image.'''

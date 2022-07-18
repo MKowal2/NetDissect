@@ -5,16 +5,32 @@ import codecs
 import csv
 from PIL import Image
 
+
+
 def unify(data_sets, directory, size=None, segmentation_size=None, crop=False,
-        splits=None, min_frequency=None, min_coverage=None,
+        splits=None, min_frequency=None, min_coverage=None, min_vid_frequency=None,
         synonyms=None, test_limit=None, single_process=False, verbose=False, debug=False):
+
+
     # create directory
     ensure_dir(directory)
     ensure_dir(os.path.join(directory, 'videos'))
+
+    write_readme_file([
+        ('data_sets', data_sets), ('size', size),
+        ('segmentation_size', segmentation_size), ('crop', crop),
+        ('splits', splits),
+        ('min_frequency', min_frequency), ('min_coverage', min_coverage),
+        ('video_min_frequency', min_vid_frequency),
+        ('synonyms', synonyms), ('test_limit', test_limit),
+        ('single_process', single_process)],
+        directory=directory, verbose=verbose)
+
+
     # Phase 1: Count label statistics
     # frequency = number of images touched by each label
     # coverage  = total portion of images covered by each label
-    frequency, coverage = gather_label_statistics(
+    frequency, coverage, video_frequency = gather_label_statistics(
             data_sets, test_limit, single_process,
             segmentation_size, crop, verbose, debug)
     # Phase 2: Sort, collapse, and filter labels
@@ -22,10 +38,10 @@ def unify(data_sets, directory, size=None, segmentation_size=None, crop=False,
     report_aliases(directory, labnames, data_sets, frequency, verbose)
     # Phase 3: Filter by frequncy, and assign numbers
     names, assignments = assign_labels(
-            labnames, frequency, coverage, min_frequency, min_coverage, verbose)
+            labnames, frequency, coverage, video_frequency, min_frequency, min_coverage, min_vid_frequency, verbose)
     # Phase 4: Collate and output label stats
     cats = write_label_files(
-            directory, names, assignments, frequency, coverage, syns, verbose)
+            directory, names, assignments, frequency, coverage, video_frequency, syns, verbose)
     # Phase 5: Create normalized segmentation files
     create_segmentations(
             directory, data_sets, splits, assignments, size, segmentation_size,
@@ -38,20 +54,31 @@ def gather_label_statistics(data_sets, test_limit, single_process,
     Phase 1 of unification.  Counts label statistics.
     '''
     # Count frequency and coverage for each individual image
+    video_stats = {}
+    # img_stats, video_stats = map_in_pool(partial(count_label_statistics,
     stats = map_in_pool(partial(count_label_statistics,
         segmentation_size=segmentation_size,
         crop=crop,
-        verbose=verbose),
+        verbose=verbose,
+        video_stats=video_stats),
             all_dataset_segmentations(data_sets, test_limit, debug=debug),
             single_process=single_process,
             verbose=verbose)
 
-    # todo: video frequency and coverage - can we calculate this from the image frequency / coverage?
     # Add them up
-    frequency, coverage = (sum_histogram(d) for d in zip(*stats))
-    return frequency, coverage
+    for idx, d in enumerate(zip(*stats)):
+        if idx == 0:
+            # calculate image frequency
+            frequency = sum_histogram(d)
+            # calculate video frequency
+            video_frequency = video_sum_histogram(d)
+        elif idx == 1:
+            # image and video coverage are the same since it considers every pixel in the dataset independantly
+            coverage = sum_histogram(d)
+    # frequency, coverage = (sum_histogram(d) for d in zip(*stats))
+    return frequency, coverage, video_frequency
 
-def count_label_statistics(record, segmentation_size, crop, verbose):
+def count_label_statistics(record, segmentation_size, crop, verbose, video_stats):
     '''
     Resolves the segmentation record, and then counts all nonzero
     labeled pixels in the resulting segmentation.  Returns two maps:
@@ -62,6 +89,9 @@ def count_label_statistics(record, segmentation_size, crop, verbose):
     video_name = md[-1]
     if verbose:
         print( 'Counting #%d %s %s' % (index, dataset, os.path.dirname(fn)))
+
+    # if video_name not in video_stats.keys():
+        # print(1)
 
     # get dict of all segmentation maps (e.g., flow-bins, actions, etc)
     full_seg, shape = seg_class.resolve_segmentation(md)
@@ -148,17 +178,22 @@ def report_aliases(directory, labnames, data_sets, frequency, verbose):
             report('')
 
 def assign_labels(
-        labnames, frequency, coverage, min_frequency, min_coverage, verbose):
+        labnames, frequency, coverage, video_frequency, min_frequency, min_coverage, min_vid_frequency, verbose):
     '''
     Phase 3 of unification.
     Filter names that are too infrequent, then assign numbers.
     '''
     # Collect by-name frequency and coverage
     name_frequency = join_histogram(frequency, labnames)
+    video_name_frequency = join_histogram(video_frequency, labnames)
     name_coverage = join_histogram(coverage, labnames)
     names = name_frequency.keys()
+
+    # filter by image frquency, coverage, video frequency
     if min_frequency is not None:
         names = [n for n in names if name_frequency[n] >= min_frequency]
+    if min_vid_frequency is not None:
+        names = [n for n in names if video_name_frequency[n] >= min_frequency]
     if min_coverage is not None:
         names = [n for n in names if name_coverage[n] >= min_coverage]
     # Put '-' at zero
@@ -170,7 +205,7 @@ def assign_labels(
     return names, assignments
 
 def write_label_files(
-        directory, names, assignments, frequency, coverage, syns, verbose):
+        directory, names, assignments, frequency, coverage, video_frequency, syns, verbose):
     '''
     Phase 4 of unification.
     Collate some stats and then write then to two metadata files.
@@ -179,17 +214,22 @@ def write_label_files(
     synmap = invert_dict(dict((w, assignments[lab]) for w, lab in syns.items()))
     # We need an (index, category) count
     ic_freq = join_histogram_fn(frequency, lambda x: (assignments[x], x[1]))
+    vid_ic_freq = join_histogram_fn(video_frequency, lambda x: (assignments[x], x[1]))
     ic_cov = join_histogram_fn(coverage, lambda x: (assignments[x], x[1]))
     for z in [(j, cat) for j, cat in ic_freq if j == 0]:
         del ic_freq[z]
+        del vid_ic_freq[z]
         del ic_cov[z]
     catstats = [[] for n in names]
+    vid_catstats = [[] for n in names]
     # For each index, get a (category, frequency) list in descending order
     for (ind, cat), f in sorted(ic_freq.items(), key=lambda x: -x[1]):
         catstats[ind].append((cat, f))
+    for (ind, cat), f in sorted(vid_ic_freq.items(), key=lambda x: -x[1]):
+        vid_catstats[ind].append((cat, f))
     index_coverage = join_histogram(coverage, assignments)
     with open(os.path.join(directory, 'label.csv'), 'w') as csvfile:
-        fields = ['number', 'name', 'category', 'frequency', 'coverage', 'syns']
+        fields = ['number', 'name', 'category', 'frequency', 'coverage', 'vid_frequency', 'syns']
         writer = csv.DictWriter(csvfile, fieldnames=fields)
         writer.writeheader()
         for ind, name in enumerate(names):
@@ -201,6 +241,7 @@ def write_label_files(
                 category=';'.join('%s(%d)' % s for s in catstats[ind]),
                 frequency='%d' % sum(f for c, f in catstats[ind]),
                 coverage='%f' % index_coverage[ind],
+                vid_frequency='%d' % sum(f for c, f in vid_catstats[ind]),
                 syns=';'.join([s for s in synmap[ind] if s != name])
             ))
     # For each category, figure the first, last, and other stats
@@ -209,9 +250,10 @@ def write_label_files(
     last_index = build_histogram(cat_ind, max)
     count_labels = build_histogram([(cat, 1) for cat, _ in cat_ind])
     cat_freq = join_histogram_fn(ic_freq, lambda x: x[1])
+    vid_cat_freq = join_histogram_fn(vid_ic_freq, lambda x: x[1])
     cats = sorted(first_index.keys(), key=lambda x: first_index[x])
     with open(os.path.join(directory, 'category.csv'), 'w') as csvfile:
-        fields = ['name', 'first', 'last', 'count', 'frequency']
+        fields = ['name', 'first', 'last', 'count', 'frequency', 'vid_frequency']
         writer = csv.DictWriter(csvfile, fieldnames=fields)
         writer.writeheader()
         for cat in cats:
@@ -220,12 +262,13 @@ def write_label_files(
                 first=first_index[cat],
                 last=last_index[cat],
                 count=count_labels[cat],
-                frequency=cat_freq[cat]))
+                frequency=cat_freq[cat],
+                vid_frequency=vid_cat_freq[cat]))
     # And for each category, create a dense coding file.
     for cat in cats:
         dense_code = [0] + sorted([i for i, c in ic_freq if c == cat],
                 key=lambda i: (-ic_freq[(i, cat)], -ic_cov[(i, cat)]))
-        fields = ['code', 'number', 'name', 'frequency', 'coverage']
+        fields = ['code', 'number', 'name', 'frequency', 'coverage', 'vid_frequency']
         with open(os.path.join(directory, 'c_%s.csv' % cat), 'w') as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=fields)
             writer.writeheader()
@@ -237,7 +280,8 @@ def write_label_files(
                     number=i,
                     name=names[i],
                     frequency=ic_freq[(i, cat)],
-                    coverage=ic_cov[(i, cat)]))
+                    coverage=ic_cov[(i, cat)],
+                    vid_frequency=vid_ic_freq[(i, cat)]))
     return cats
 
 
@@ -321,7 +365,6 @@ def translate_segmentation(record, directory, mapping, size,
     imagedir = os.path.join(directory, 'videos')
     ensure_dir(os.path.join(imagedir, dataset))
     ensure_dir(os.path.join(imagedir, dataset, video_name))
-    # todo: only save images from centercropped video
     fn = save_image(jpg, imagedir, dataset, os.path.join(video_name,basename))
     result = {
             'image': os.path.join(dataset, fn),
@@ -389,17 +432,45 @@ if __name__ == '__main__':
     print('Loading source segmentations.')
     # categories = ['dynamics', 'data_processing']
     categories = ['dynamics', 'appearance', 'color', 'flow']
+    # categories = ['color', 'flow']
     dtdb = dtdb_dataset.DTDB(data_root='/home/m2kowal/data/DTDB',
                              categories=categories,
-                             min_video_frame_length=100,
+                             min_video_frame_length=128,
                              center_crop=128)
+
+    a2d = a2d_dataset.A2D(data_root='/home/m2kowal/data/a2d_dataset',
+                             categories=categories,
+                             min_video_frame_length=64,
+                             center_crop=64)
+
+
+
 
     data = OrderedDict(dtdb=dtdb)
 
+    # # Runtime settings
+    # min_frequency = 1000
+    # min_coverage = 50
+    # min_vid_frequency = 20
+    # single_process = False
+    # debug = False
+
+    # Debug settings
+    min_frequency = 0
+    min_coverage = 0
+    min_vid_frequency = 0
+    single_process = True
+    debug = True
+
+    directory = 'dataset/DEBUG_video_broden1_%d' % args.size
     unify(data,
             splits=OrderedDict(train=0.7, val=0.3),
             size=image_size, segmentation_size=seg_size,
-            directory=('dataset/video_broden1_%d' % args.size),
+            directory=directory,
             synonyms=None,
-            min_frequency=10, min_coverage=0.5, single_process=True,verbose=True,
-            debug=True)
+            min_frequency=min_frequency, # needs to be in at least 1000 frames
+            min_coverage=min_coverage, # total sum of pixel labels needs to be over 50 frames
+            min_vid_frequency=min_vid_frequency, # needs to be in at least 10 different videos
+            single_process=single_process,
+            verbose=True,
+            debug=debug)

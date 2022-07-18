@@ -4,7 +4,9 @@ from multiprocessing import Pool, cpu_count
 from tqdm import tqdm
 import operator
 import numpy
-import re
+import codecs
+import subprocess
+import time
 from PIL import Image
 from scipy.ndimage.interpolation import zoom
 
@@ -42,15 +44,34 @@ def sum_histogram(histogram_list):
     '''Adds histogram dictionaries elementwise.'''
     result = {}
     for d in histogram_list:
-        video_name = d['video_name']
         for k, v in d.items():
             if not k == 'video_name':
-                #todo: video statistics
-                exit()
                 if k not in result:
                     result[k] = v
                 else:
                     result[k] += v
+    return result
+
+def video_sum_histogram(histogram_list):
+    '''Adds histogram dictionaries elementwise dependant on video ids.'''
+    result = {}
+    video_name_list = []
+    for d in histogram_list:
+        video_name = d['video_name']
+        if not video_name in video_name_list: # if it is a new video
+            video_name_list.append(video_name) # add to counted video list
+            for k, v in d.items():
+                if not k == 'video_name':
+                    if k not in result: # initialize new labels not found in previous videos
+                        result[k] = v
+                    else: # add value if it is found in previous videos
+                        result[k] += v
+        else: # if the video has been seen before
+            for k, v in d.items():
+                if not k == 'video_name':
+                    if k not in result: # set any new labels not seen in previous frames
+                        result[k] = v
+
     return result
 
 def setup_sigint():
@@ -165,7 +186,6 @@ def hashed_float(s):
     # Inspired by http://code.activestate.com/recipes/391413/ by Ori Peleg
     '''Hashes a string to a float in the range [0, 1).'''
     import hashlib, struct
-    #TODO: fix this it is broken from the change of using md5 library
     [number] = struct.unpack(">Q", hashlib.md5(s.encode('utf-8')).digest()[:8])
     return number / (2.0 ** 64)  # python will constant-fold this denominator.
 
@@ -268,8 +288,7 @@ def save_segmentation(seg, imagedir, dataset, filename, category, translation):
     shape = numpy.shape(seg)
     if len(shape) < 2:
         # Save numbers as decimal strings; and omit zero labels.
-        return ['%d' % translation[t]
-                for t in (seg if len(shape) else [seg]) if t]
+        return ['%d' % translation[t] for t in (seg if len(shape) else [seg]) if t]
 
     result = []
     for channel in ([()] if len(shape) == 2 else range(shape[0])):
@@ -281,7 +300,7 @@ def save_segmentation(seg, imagedir, dataset, filename, category, translation):
         # else:
         #     fn = re.sub('(?:\.jpg)?$', '_%s_%d.png' %
         #             (category, channel + 1), filename)
-        fn = filename[:-4] + '_flow.png'
+        fn = filename[:-4] + '_{}.png'.format(category)
         result.append(os.path.join(dataset, fn))
         im.save(os.path.join(imagedir, dataset, fn))
     return result
@@ -292,3 +311,97 @@ def encodeRG(channel):
     result[:,:,0] = channel % 256
     result[:,:,1] = (channel // 256)
     return result
+
+
+README_TEXT= '''
+This directory contains the following data and metadata files:
+
+    images/[datasource]/...
+         images drawn from a specific datasource are reformatted
+         and scaled and saved as jpeg and png files in subdirectories
+         of the images directory.
+
+    index.csv
+        contains a list of all the images in the dataset, together with
+        available labeled data, in the form:
+
+        image,split,ih,iw,sh,sw,[color,object,material,part,scene,texture]
+
+        for examplle:
+        dtd/g_0106.jpg,train,346,368,346,368,dtd/g_0106_color.png,,,,,314;194
+
+        The first column is always the original image filename relative to
+        the images/ subdirectory; then image height and width and segmentation
+        heigh and width dimensions are followed by six columns for label
+        data in the six categories.  Label data can be per-pixel or per-image
+        (assumed to apply to every pixel in the image), and 0 or more labels
+        can be specified per category.  If there are no labels, the field is ''.
+        If there are multiple labels, they are separated by semicolons,
+        and it is assumed that dominant interpretations are listed first.
+        Per-image labels are represented by a decimal number; and per-image
+        labels are represented by a filename for an image which encodes
+        the per-pixel labels in the (red + 256 * green) channels.
+
+    category.csv
+        name,first,last,count,frequency,video_frequency
+
+        for example:
+        object,12,1138,529,208688
+
+        In the generic case there may not be six categories; this directory
+        may contain any set of categories of segmentations.  This file
+        lists all segmentation categories found in the data sources,
+        along with statistics on now many class labels apply to
+        each category, and in what range; as well as how many
+        images mention a label of that category
+
+    label.csv
+        number,name,category,frequency,coverage,syns
+
+        for example:
+        10,red-c,color(289),289,9.140027,
+        21,fabric,material(36);object(3),39,4.225474,cloth
+
+        This lists all label numbers and corresponding names, along
+        with some statistics including the number of images for
+        which the label appears in each category; the total number
+        of images which have the label; and the pixel portions
+        of images that have the label.
+
+    c_[category].csv (for example, map_color.csv)
+        code,number,name,frequency,coverage,video_frequency
+
+        for example:
+        4,31,glass,27,0.910724454131
+
+        Although labels are store under a unified code, this file
+        lists a standard dense coding that can be used for a
+        specific subcategory of labels.
+'''
+def write_readme_file(args, directory, verbose):
+    '''
+    Writes a README.txt that describes the settings used to geenrate the ds.
+    '''
+    with codecs.open(os.path.join(directory, 'README.txt'), 'w', 'utf-8') as f:
+        def report(txt):
+            f.write('%s\n' % txt)
+            if verbose:
+                print( txt)
+        title = '%s joined segmentation data set' % os.path.basename(directory)
+        report('%s\n%s' % (title, '=' * len(title)))
+        for key, val in args:
+            if key == 'data_sets':
+                report('Joins the following data sets:')
+                for name, kind in val.items():
+                    report('    %s: %d images' % (name, kind.size()))
+            else:
+                report('%s: %r' % (key, val))
+        report('\ngenerated at: %s' % time.strftime("%Y-%m-%d %H:%M"))
+        try:
+            label = subprocess.check_output(['git', 'rev-parse', 'HEAD'])
+            report('git label: %s' % label)
+        except:
+            pass
+        f.write('\n')
+        # Add boilerplate readme text
+        f.write(README_TEXT)
