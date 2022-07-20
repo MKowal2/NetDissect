@@ -58,14 +58,14 @@ elif MODEL == 'resnet50':
         MODEL_PARALLEL = False
 
 if TEST_MODE:
-    WORKERS = 1
+    WORKERS = 8
     BATCH_SIZE = 4
     TALLY_BATCH_SIZE = 2
     TALLY_AHEAD = 1
     INDEX_FILE = 'index_sm.csv'
     OUTPUT_FOLDER += "_test"
 else:
-    WORKERS = 1
+    WORKERS = 8
     BATCH_SIZE = 128
     TALLY_BATCH_SIZE = 16
     TALLY_AHEAD = 4

@@ -1,4 +1,4 @@
-import settings
+import video_settings as settings
 from loader.model_loader import loadmodel
 from feature_operation import hook_feature,FeatureOperator
 from visualize.report import generate_html_summary

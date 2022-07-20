@@ -13,6 +13,7 @@ import os.path
 import torch.utils.data as data
 import csv
 import mat73
+from tqdm import tqdm
 
 category_dict = {
 'Background'	:0,
@@ -81,42 +82,87 @@ category_dict = {
 'dog-none':	79}
 
 class A2D(data.Dataset):
-    def __init__(self, data_root, categories, min_video_frame_length=100,center_crop=128):
-        # need to replace this with datalist of all images, with corresponding styles and class labels
+    def __init__(self, data_root, categories, min_video_frame_length=64,choose_ann_idx=0):
+        print('Creating A2D Dataset...')
         self.data_root = data_root
-        # todo: decide on pseudo-label technique
-        # todo: format get_data() like dtdb
-        self.data = self.get_data()
-
+        self.idx_action_dict = {y: x for x, y in category_dict.items()}
         self.appearances, self.dynamics = self._get_app_dyn()
         self.dynamics_map = dict((t, i) for i, t in enumerate(self.dynamics))
         self.appearance_map = dict((t, i) for i, t in enumerate(self.appearances))
         self.categories = categories
+        self.path_labels, self.data = self.get_data(min_video_frame_length,choose_ann_idx)
+        '''
+        self.path_labels = [{path (to frames!): x, dynamic: x, appearance: x, video: x}, {}, ...]
+        self.data = {OG_vid_id: {duration: x , frame_count: x, fps: x, size: [h, w], dynamic: x, appearance: x, subset: train}}
+        '''
 
-    def get_data(self):
+
+    def get_data(self, min_video_frame_length=0,choose_ann_idx=0):
+        min_frame_half_count = int(min_video_frame_length/2)
+
         annotation_path = os.path.join(self.data_root, 'Release/videoset.csv')
         with open(annotation_path, 'r') as f:
             annotations = list(csv.reader(f))
+        num_skipped_vids = 0
+        list_data = []
+        dict_data = {}
 
+        for idx, video in enumerate(tqdm(annotations)):
+            num_frames = int(video[6])
+            if num_frames < min_video_frame_length:
+                num_skipped_vids += 1
+                continue
 
-        print('Constructing paired data list...')
-        data = []
-        for idx, video in enumerate(annotations):
-            for frame_id in range(1, int(video[-3])):
-                print('only video labels plz')
-                mat1 = self.data_root + '/Release/Annotations/mat/' + video[0] + "/{:05d}.mat".format(frame_id)
-                frame1_path = os.path.join(self.data_root + '/frames',video[0]) + "/{:05d}.png".format(frame_id)
-                frame2_path = os.path.join(self.data_root + '/frames',video[0]) + "/{:05d}.png".format(frame_id+1)
-                data.append({'video_id': video[0],
-                    'frame1': frame1_path,
-                    'frame2': frame2_path})
+            # need to get labelled frames and then decide on which annotated frame to use as center!
+            annotated_frames = glob.glob(self.data_root + '/Release/Annotations/mat/{}/*'.format(video[0]))
+            annotated_frames = sorted([int(idx[-9:].strip('.mat')) for idx in annotated_frames])
 
-        return data
+            valid_ann_frames = []
+            for ann in annotated_frames:
+                # check if there are 32 frames on either side of any of the frames
+                if (ann-0) > min_frame_half_count and (num_frames-ann) > min_frame_half_count:
+                    valid_ann_frames.append(ann)
 
-    def _read_mask(self, mask_fname):
-        anot = mat73.loadmat(mask_fname)
-        anot_parsed = anot['reS_id']
-        return anot_parsed
+            # select the annotated frame if there are some
+            if len(valid_ann_frames) == 0:
+                num_skipped_vids += 1
+                continue
+            else:
+                ann_idx = valid_ann_frames[choose_ann_idx]
+                start_frame = ann_idx - min_frame_half_count
+                end_frame = ann_idx + min_frame_half_count
+
+            mat_path = self.data_root + '/Release/Annotations/mat/{}/{:05d}.mat'.format(video[0],ann_idx)
+            labels = np.unique(read_mask(mat_path))[1:]
+            appearances = [self.idx_action_dict[val].split('-')[0].strip() for val in labels]
+            dynamics = [self.idx_action_dict[val].split('-')[1].strip() for val in labels]
+            dict_data[video[0]] = {
+                'size': [video[4], video[5]],
+                'frame_count': video[6],
+                'subset': 'train' if video[-1] == '0' else 'test',
+                'annotation_frame': ann_idx,
+                'dynamic': dynamics,
+                'appearance': appearances
+            }
+
+            frames = list(range(start_frame,end_frame))
+            for frame in frames:
+                path = self.data_root + '/frames/{}/{:05d}.png'.format(video[0],frame)
+                list_data.append(
+                    {
+                        'path': path,
+                        'dynamic': dynamics,
+                        'appearance': appearances,
+                        'video': video[0],
+                        'label_path': mat_path,
+                        'annotated_frame': True if frame == ann_idx else False # indicator whether this is a frame with a label in it
+                    }
+                )
+
+        print('{} videos removed'.format(num_skipped_vids))
+        print('{} total frames'.format(len(list_data)))
+        print('{} total videos'.format(len(dict_data.keys())))
+        return list_data, dict_data
 
     def _get_app_dyn(self):
         actor_actions = list(category_dict.keys())[1:]
@@ -127,15 +173,35 @@ class A2D(data.Dataset):
 
         return appearances, dynamics
 
+    @classmethod
+    def resolve_segmentation(cls, metadata, categories=None):
+        filename, dyn_numbers, app_numbers, labelled, label_path, video_name = metadata
+        result = {}
+        if wants('dynamics', categories) and labelled:
+            result['dynamic']  = dyn_mp(read_mask(filename.replace('frames', 'Release/Annotations/mat').replace('.png', '.mat')))
+            # result['dynamic']  = read_mask(filename.replace('frames', 'Release/Annotations/mat').replace('.png', '.mat'))
+        if wants('appearance', categories) and labelled:
+            result['appearance'] = app_mp(read_mask(filename.replace('frames', 'Release/Annotations/mat').replace('.png', '.mat')))
+            # result['appearance'] = read_mask(filename.replace('frames', 'Release/Annotations/mat').replace('.png', '.mat')))
+        if wants('flow', categories):
+            result['flow'] = bin_flow(filename.replace('.png', '_flow.npy'))
+        if wants('color', categories):
+            result['color'] = colorname.label_major_colors(np.asarray(Image.open(filename))) + 1
+
+        # return a dictionary of segmentation maps (or [1] for video label) and shape of video
+        shape = result['color'].shape[-2:] if wants('color', categories) else (1, 1)
+        return result, shape
+
+
 
     def metadata(self, i):
         '''Returns an object that can be used to create all segmentations.'''
-        filename, dynamic, appearance, video_name = self.path_labels[i]['path'], self.path_labels[i]['dynamic'], \
-                                                    self.path_labels[i]['appearance'], self.path_labels[i]['video']
+        filename, dynamic, appearance, labelled, label_path, video_name = self.path_labels[i]['path'], self.path_labels[i]['dynamic'], \
+                                                    self.path_labels[i]['appearance'], self.path_labels[i]['annotated_frame'], self.path_labels[i]['label_path'], self.path_labels[i]['video']
         # need to change to list for multi-labeled videos
-        dyn_numbers = [self.dynamics_map[dynamic]]
-        app_numbers = [self.appearance_map[appearance]]
-        return filename, dyn_numbers, app_numbers, video_name
+        dyn_numbers = [self.dynamics_map[dyn] for dyn in dynamic]
+        app_numbers = [self.appearance_map[app] for app in appearance]
+        return filename, dyn_numbers, app_numbers, labelled, label_path, video_name
 
     def filename(self, i):
         '''Returns the filename for the nth dataset image.'''
@@ -157,14 +223,8 @@ class A2D(data.Dataset):
         if category == 'flow':
             return [flow_names1[j] + '-f']
         if category == 'dynamic':
-            # todo: get pseudo labels for all frames
-            print('todo: get pseudo labels for all frames')
-            exit()
             return [self.dynamics[j]]
         if category == 'appearance':
-            # todo: get pseudo labels for all frames
-            print('todo: get pseudo labels for all frames')
-            exit()
             return [self.appearances[j]]
         return []
 
@@ -172,5 +232,30 @@ def wants(what, option):
     if option is None:
         return True
     return what in option
+
+def read_mask(mask_fname):
+    anot = mat73.loadmat(mask_fname)
+    anot_parsed = anot['reS_id']
+    return anot_parsed
+
+
+app_dyn_hash_dict = {
+    'dynamic': {},
+    'appearance': {}
+}
+for val in category_dict.values():
+    if val == 0:
+        app_dyn_hash_dict['dynamic'][val] = val
+        app_dyn_hash_dict['appearance'][val] = val
+    else:
+        app_dyn_hash_dict['dynamic'][val] = int(str(val)[1])
+        app_dyn_hash_dict['appearance'][val] = int(str(val)[0])
+
+def dyn_mp(entry):
+    return app_dyn_hash_dict['dynamic'][entry] if entry in app_dyn_hash_dict['dynamic'] else entry
+dyn_mp = np.vectorize(dyn_mp)
+def app_mp(entry):
+    return app_dyn_hash_dict['appearance'][entry] if entry in app_dyn_hash_dict['appearance'] else entry
+app_mp = np.vectorize(app_mp)
 
 

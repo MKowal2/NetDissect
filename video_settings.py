@@ -1,6 +1,6 @@
 ######### global settings  #########
 GPU = True                                  # running on GPU is highly suggested
-TEST_MODE = False                           # turning on the testmode means the code will run on a small dataset.
+TEST_MODE = True                           # turning on the testmode means the code will run on a small dataset.
 CLEAN = True                               # set to "True" if you want to clean the temporary large files after generating result
 MODEL = 'resnet18'                          # model arch: resnet18, alexnet, resnet50, densenet161
 DATASET = 'places365'                       # model trained on: places365 or imagenet
@@ -9,8 +9,10 @@ SEG_THRESHOLD = 0.04                        # the threshold used for visualizati
 SCORE_THRESHOLD = 0.04                      # the threshold used for IoU score (in HTML file)
 TOPN = 10                                   # to show top N image with highest activation for each unit
 PARALLEL = 1                                # how many process is used for tallying (Experiments show that 1 is the fastest)
-CATAGORIES = ["object", "part","scene","texture","color","material"] # concept categories that are chosen to detect: "object", "part", "scene", "material", "texture", "color"
-OUTPUT_FOLDER = "result/pytorch_"+MODEL+"_"+DATASET # result will be stored in this folder
+FO_AHEAD = 1                                # number of data items to prefetch ahead
+SINGLE_THREAD = False                        # use a single process in dataloader
+CATAGORIES = ["dynamic", "appearance","flow","color"] # concept categories that are chosen to detect: "dynamic", "appearance", "flow", "color"
+OUTPUT_FOLDER = "result/video_dtdb_pytorch_"+MODEL+"_"+DATASET # result will be stored in this folder
 
 ########### sub settings ###########
 # In most of the case, you don't have to change them.
@@ -26,10 +28,10 @@ OUTPUT_FOLDER = "result/pytorch_"+MODEL+"_"+DATASET # result will be stored in t
 # INDEX_FILE: if you turn on the TEST_MODE, actually you should provide this file on your own
 
 if MODEL != 'alexnet':
-    DATA_DIRECTORY = 'dataset/broden1_224'
+    DATA_DIRECTORY = 'dataset/video_broden2_224'
     IMG_SIZE = 224
 else:
-    DATA_DIRECTORY = 'dataset/broden1_227'
+    # DATA_DIRECTORY = 'dataset/broden1_227'
     IMG_SIZE = 227
 
 if DATASET == 'places365':
@@ -56,14 +58,14 @@ elif MODEL == 'resnet50':
         MODEL_PARALLEL = False
 
 if TEST_MODE:
-    WORKERS = 1
-    BATCH_SIZE = 4
+    WORKERS = 4
+    BATCH_SIZE = 128
     TALLY_BATCH_SIZE = 2
-    TALLY_AHEAD = 1
-    INDEX_FILE = 'index_sm.csv'
+    TALLY_AHEAD = 4
+    INDEX_FILE = 'index_dtdb.csv'
     OUTPUT_FOLDER += "_test"
 else:
-    WORKERS = 12
+    WORKERS = 8
     BATCH_SIZE = 128
     TALLY_BATCH_SIZE = 16
     TALLY_AHEAD = 4

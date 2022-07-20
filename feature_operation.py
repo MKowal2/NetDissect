@@ -1,11 +1,12 @@
 
 import os
 from torch.autograd import Variable as V
-from scipy.misc import imresize
+from skimage.transform import resize as imresize
 import numpy as np
 import torch
-import settings
+import video_settings as settings
 import time
+from tqdm import tqdm
 import util.upsample as upsample
 import util.vecquantile as vecquantile
 import multiprocessing.pool as pool
@@ -64,42 +65,44 @@ class FeatureOperator:
             input.div_(255.0 * 0.224)
             if settings.GPU:
                 input = input.cuda()
-            input_var = V(input,volatile=True)
-            logit = model.forward(input_var)
-            while np.isnan(logit.data.cpu().max()):
-                print("nan") #which I have no idea why it will happen
-                del features_blobs[:]
+            input_var = V(input)
+            # input_var = V(input,volatile=True)
+            with torch.no_grad():
                 logit = model.forward(input_var)
-            if maxfeatures[0] is None:
-                # initialize the feature variable
+                while np.isnan(logit.data.cpu().max()):
+                    print("nan") #which I have no idea why it will happen
+                    del features_blobs[:]
+                    logit = model.forward(input_var)
+                if maxfeatures[0] is None:
+                    # initialize the feature variable
+                    for i, feat_batch in enumerate(features_blobs):
+                        size_features = (len(loader.indexes), feat_batch.shape[1])
+                        if memmap:
+                            maxfeatures[i] = np.memmap(mmap_max_files[i],dtype=float,mode='w+',shape=size_features)
+                        else:
+                            maxfeatures[i] = np.zeros(size_features)
+                if len(feat_batch.shape) == 4 and wholefeatures[0] is None:
+                    # initialize the feature variable
+                    for i, feat_batch in enumerate(features_blobs):
+                        size_features = (
+                        len(loader.indexes), feat_batch.shape[1], feat_batch.shape[2], feat_batch.shape[3])
+                        features_size[i] = size_features
+                        if memmap:
+                            wholefeatures[i] = np.memmap(mmap_files[i], dtype=float, mode='w+', shape=size_features)
+                        else:
+                            wholefeatures[i] = np.zeros(size_features)
+                np.save(features_size_file, features_size)
+                start_idx = batch_idx*settings.BATCH_SIZE
+                end_idx = min((batch_idx+1)*settings.BATCH_SIZE, len(loader.indexes))
                 for i, feat_batch in enumerate(features_blobs):
-                    size_features = (len(loader.indexes), feat_batch.shape[1])
-                    if memmap:
-                        maxfeatures[i] = np.memmap(mmap_max_files[i],dtype=float,mode='w+',shape=size_features)
-                    else:
-                        maxfeatures[i] = np.zeros(size_features)
-            if len(feat_batch.shape) == 4 and wholefeatures[0] is None:
-                # initialize the feature variable
-                for i, feat_batch in enumerate(features_blobs):
-                    size_features = (
-                    len(loader.indexes), feat_batch.shape[1], feat_batch.shape[2], feat_batch.shape[3])
-                    features_size[i] = size_features
-                    if memmap:
-                        wholefeatures[i] = np.memmap(mmap_files[i], dtype=float, mode='w+', shape=size_features)
-                    else:
-                        wholefeatures[i] = np.zeros(size_features)
-            np.save(features_size_file, features_size)
-            start_idx = batch_idx*settings.BATCH_SIZE
-            end_idx = min((batch_idx+1)*settings.BATCH_SIZE, len(loader.indexes))
-            for i, feat_batch in enumerate(features_blobs):
-                if len(feat_batch.shape) == 4:
-                    # Write in feature (or max feature) to variable at proper index (start to end idx)
-                    wholefeatures[i][start_idx:end_idx] = feat_batch
-                    maxfeatures[i][start_idx:end_idx] = np.max(np.max(feat_batch,3),2)
-                elif len(feat_batch.shape) == 3:
-                    maxfeatures[i][start_idx:end_idx] = np.max(feat_batch, 2)
-                elif len(feat_batch.shape) == 2:
-                    maxfeatures[i][start_idx:end_idx] = feat_batch
+                    if len(feat_batch.shape) == 4:
+                        # Write in feature (or max feature) to variable at proper index (start to end idx)
+                        wholefeatures[i][start_idx:end_idx] = feat_batch
+                        maxfeatures[i][start_idx:end_idx] = np.max(np.max(feat_batch,3),2)
+                    elif len(feat_batch.shape) == 3:
+                        maxfeatures[i][start_idx:end_idx] = np.max(feat_batch, 2)
+                    elif len(feat_batch.shape) == 2:
+                        maxfeatures[i][start_idx:end_idx] = feat_batch
         if len(feat_batch.shape) == 2:
             wholefeatures = maxfeatures
         return wholefeatures,maxfeatures
@@ -114,12 +117,12 @@ class FeatureOperator:
         start_time = time.time()
         last_batch_time = start_time
         batch_size = 64
-        for i in range(0, features.shape[0], batch_size):
+        for i in tqdm(range(0, features.shape[0], batch_size)):
             batch_time = time.time()
             rate = i / (batch_time - start_time + 1e-15)
             batch_rate = batch_size / (batch_time - last_batch_time + 1e-15)
             last_batch_time = batch_time
-            print('Processing quantile index %d: %f %f' % (i, rate, batch_rate))
+            # print('Processing quantile index %d: %f %f' % (i, rate, batch_rate))
             batch = features[i:i + batch_size]
             batch = np.transpose(batch, axes=(0, 2, 3, 1)).reshape(-1, features.shape[1])
             quant.add(batch)
@@ -148,7 +151,7 @@ class FeatureOperator:
             batch_rate = len(batch) / (batch_time - last_batch_time + 1e-15)
             last_batch_time = batch_time
 
-            print('labelprobe image index %d, items per sec %.4f, %.4f' % (count, rate, batch_rate))
+            print('labelprobe image index %d / %d, items per sec %.4f, %.4f' % (count, pd.indexes.stop, rate, batch_rate))
 
             for concept_map in batch:
                 count += 1
@@ -175,7 +178,8 @@ class FeatureOperator:
                 for unit_id in range(units):
                     feature_map = features[img_index][unit_id]
                     if feature_map.max() > threshold[unit_id]:
-                        mask = imresize(feature_map, (concept_map['sh'], concept_map['sw']), mode='F')
+                        mask = imresize(feature_map, (concept_map['sh'], concept_map['sw']))
+                        # mask = imresize(feature_map, (concept_map['sh'], concept_map['sw']), mode='F')
                         #reduction = int(round(settings.IMG_SIZE / float(concept_map['sh'])))
                         #mask = upsample.upsampleL(fieldmap, feature_map, shape=(concept_map['sh'], concept_map['sw']), reduction=reduction)
                         indexes = np.argwhere(mask > threshold[unit_id])

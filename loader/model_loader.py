@@ -1,4 +1,4 @@
-import settings
+import video_settings as settings
 import torch
 import torchvision
 

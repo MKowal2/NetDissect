@@ -9,12 +9,12 @@ from PIL import Image
 
 def unify(data_sets, directory, size=None, segmentation_size=None, crop=False,
         splits=None, min_frequency=None, min_coverage=None, min_vid_frequency=None,
-        synonyms=None, test_limit=None, single_process=False, verbose=False, debug=False):
+        synonyms=None, test_limit=None, single_process=False, verbose=False, debug=False, num_threads=1):
 
 
     # create directory
     ensure_dir(directory)
-    ensure_dir(os.path.join(directory, 'videos'))
+    ensure_dir(os.path.join(directory, 'images'))
 
     write_readme_file([
         ('data_sets', data_sets), ('size', size),
@@ -32,7 +32,7 @@ def unify(data_sets, directory, size=None, segmentation_size=None, crop=False,
     # coverage  = total portion of images covered by each label
     frequency, coverage, video_frequency = gather_label_statistics(
             data_sets, test_limit, single_process,
-            segmentation_size, crop, verbose, debug)
+            segmentation_size, crop, verbose, debug,num_threads)
     # Phase 2: Sort, collapse, and filter labels
     labnames, syns = normalize_labels(data_sets, frequency, coverage, synonyms)
     report_aliases(directory, labnames, data_sets, frequency, verbose)
@@ -49,7 +49,7 @@ def unify(data_sets, directory, size=None, segmentation_size=None, crop=False,
 
 
 def gather_label_statistics(data_sets, test_limit, single_process,
-        segmentation_size, crop, verbose, debug):
+        segmentation_size, crop, verbose, debug, num_threads):
     '''
     Phase 1 of unification.  Counts label statistics.
     '''
@@ -63,7 +63,8 @@ def gather_label_statistics(data_sets, test_limit, single_process,
         video_stats=video_stats),
             all_dataset_segmentations(data_sets, test_limit, debug=debug),
             single_process=single_process,
-            verbose=verbose)
+            verbose=verbose,
+                        num_threads=num_threads)
 
     # Add them up
     for idx, d in enumerate(zip(*stats)):
@@ -314,7 +315,7 @@ def create_segmentations(directory, data_sets, splits, assignments, size,
             all_dataset_segmentations(data_sets, test_limit),
             single_process=single_process,
             verbose=verbose)
-    # Sort nonempty itesm randomly+reproducibly by md5 hash of the filename.
+    # Sort nonempty items randomly+reproducibly by md5 hash of the filename.
     ordered = sorted([(hashed_float(r['image']), r) for r in segmented if r])
     # Assign splits, pullout out last 20% for validation.
     cutoffs = cumulative_splits(splits)
@@ -343,7 +344,7 @@ def translate_segmentation(record, directory, mapping, size,
     file_dirs = filename.split('/')
     video_name, basename = file_dirs[-2], file_dirs[-1]
     if verbose:
-        print( 'Processing #%d %s %s' % (index, dataset, basename))
+        print( 'Processing #%d %s %s' % (index, dataset, filename))
     full_seg, shape = seg_class.resolve_segmentation(md)
     # Rows can be omitted by returning no segmentations.
     if not full_seg:
@@ -362,7 +363,7 @@ def translate_segmentation(record, directory, mapping, size,
                 segmentation_size = numpy.shape(full_seg[cat])
                 break
 
-    imagedir = os.path.join(directory, 'videos')
+    imagedir = os.path.join(directory, 'images')
     ensure_dir(os.path.join(imagedir, dataset))
     ensure_dir(os.path.join(imagedir, dataset, video_name))
     fn = save_image(jpg, imagedir, dataset, os.path.join(video_name,basename))
@@ -407,7 +408,6 @@ if __name__ == '__main__':
     import os
 
     # dataset imports
-    # TODO: build A2D dataloader
     import dtdb_dataset
     import a2d_dataset
 
@@ -419,9 +419,29 @@ if __name__ == '__main__':
             type=int, default=224,
             help='pixel size for input videos')
     parser.add_argument(
+            '--min_frequency',
+            type=int, default=1,
+            help='minimum number of images touched by each label to keep label')
+    parser.add_argument(
+            '--min_coverage',
+            type=int, default=1,
+            help='total portion of pixels touched on an per-image bases')
+    parser.add_argument(
+            '--min_vid_frequency',
+            type=int, default=1,
+            help='minimum number of videos touched by each label to keep label')
+    parser.add_argument(
+            '--num_threads',
+            type=int, default=8,
+            help='number of threads')
+    parser.add_argument(
             '--single_proc',
-            type=bool, default=False,
+            action='store_true',
             help='Whether to use multi_proc')
+    parser.add_argument(
+            '--debug',
+            action='store_true',
+            help='Whether to debug and only use a sample of data')
     args = parser.parse_args()
 
     image_size = (args.size, args.size)
@@ -441,28 +461,29 @@ if __name__ == '__main__':
     a2d = a2d_dataset.A2D(data_root='/home/m2kowal/data/a2d_dataset',
                              categories=categories,
                              min_video_frame_length=64,
-                             center_crop=64)
+                             choose_ann_idx=0) # choose_ann_idx is the idx of the annotations to choos
 
 
 
 
-    data = OrderedDict(dtdb=dtdb)
+    data = OrderedDict(dtdb=dtdb, a2d=a2d)
+    # data = OrderedDict(a2d=a2d)
 
-    # # Runtime settings
-    # min_frequency = 1000
-    # min_coverage = 50
-    # min_vid_frequency = 20
-    # single_process = False
-    # debug = False
 
     # Debug settings
-    min_frequency = 0
-    min_coverage = 0
-    min_vid_frequency = 0
-    single_process = True
-    debug = True
+    min_frequency = args.min_frequency
+    min_coverage = args.min_coverage
+    min_vid_frequency = args.min_vid_frequency
+    single_process = args.single_proc
+    debug = args.debug
+    num_threads = args.num_threads
 
-    directory = 'dataset/DEBUG_video_broden1_%d' % args.size
+
+
+    # single_process = True
+    # debug = True
+
+    directory = 'dataset/video_broden3_%d' % args.size
     unify(data,
             splits=OrderedDict(train=0.7, val=0.3),
             size=image_size, segmentation_size=seg_size,
@@ -473,4 +494,5 @@ if __name__ == '__main__':
             min_vid_frequency=min_vid_frequency, # needs to be in at least 10 different videos
             single_process=single_process,
             verbose=True,
-            debug=debug)
+            debug=debug,
+            num_threads=num_threads)

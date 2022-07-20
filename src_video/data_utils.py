@@ -17,13 +17,13 @@ def ensure_dir(targetdir):
         except:
             pass
 
-def map_in_pool(fn, data, single_process=False, verbose=False):
+def map_in_pool(fn, data, single_process=False, verbose=False,num_threads=8):
     '''
     Our multiprocessing solution; wrapped to stop on ctrl-C well.
     '''
     if single_process:
         return map(fn, data)
-    n_procs = min(cpu_count(), 12)
+    n_procs = min(cpu_count(), num_threads)
     original_sigint_handler = setup_sigint()
     pool = Pool(processes=n_procs, initializer=setup_sigint)
     restore_sigint(original_sigint_handler)
@@ -95,7 +95,7 @@ def all_dataset_segmentations(data_sets, test_limit=None, debug=False):
             if j % 10000 == 0:
                 print('{}/{} Completed'.format(j, total_imgs))
             if debug:
-                if j == 300:
+                if j > 100:
                     break
 
 def truncate_range(data, limit):
@@ -294,7 +294,10 @@ def save_segmentation(seg, imagedir, dataset, filename, category, translation):
     for channel in ([()] if len(shape) == 2 else range(shape[0])):
         # Save bitwise channels as filenames of PNGs; and save the files.
         #todo: check if we need encodeRG here
-        im = Image.fromarray(encodeRG(translation[seg[channel]]))
+        try:
+            im = Image.fromarray(encodeRG(translation[seg[channel]]))
+        except:
+            print(channel)
         # if len(shape) == 2:
         #     fn = re.sub('(?:\.jpg)?$', '_%s.png' % category, filename)
         # else:
@@ -393,7 +396,8 @@ def write_readme_file(args, directory, verbose):
             if key == 'data_sets':
                 report('Joins the following data sets:')
                 for name, kind in val.items():
-                    report('    %s: %d images' % (name, kind.size()))
+                    report('    %s: %d videos' % (name, kind.video_size()))
+                    report('    %s: %d images' % (name, kind.img_size()))
             else:
                 report('%s: %r' % (key, val))
         report('\ngenerated at: %s' % time.strftime("%Y-%m-%d %H:%M"))

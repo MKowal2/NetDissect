@@ -9,6 +9,7 @@ from data_processing.bin_flow import bin_flow
 from data_processing.bin_flow import flow_names1
 from loadseg import AbstractSegmentation
 from PIL import Image
+from tqdm import tqdm
 
 no_flow_classes = [
     'Chaotic_motion',
@@ -51,7 +52,7 @@ def filter_videos(data_root, data, min_video_frame_length, center_crop):
     if center_crop is not None:
         half_clip_length = int(center_crop/2)
 
-    for vid in data:
+    for vid in tqdm(data):
         info = data[vid]
 
         # remove all examples without an appearance label
@@ -86,12 +87,14 @@ def filter_videos(data_root, data, min_video_frame_length, center_crop):
 
     print('{} videos removed'.format(num_removed_videos))
     print('{} total frames'.format(len(list_data)))
+    print('{} total videos'.format(len(new_data.keys())))
     return list_data, new_data
 
 
 # class DTDB(data.Dataset):
 class DTDB(AbstractSegmentation):
     def __init__(self, data_root, categories, min_video_frame_length=100,center_crop=128):
+        print('Creating DTDB Dataset...')
         # need to replace this with datalist of all images, with corresponding styles and class labels
         self.data_root = data_root
 
@@ -134,7 +137,7 @@ class DTDB(AbstractSegmentation):
         return self.path_labels[i]['path']
 
     def video_size(self):
-        '''Returns the number of images in this dataset.'''
+        '''Returns the number of videos in this dataset.'''
         return len(self.data)
 
     def img_size(self):
