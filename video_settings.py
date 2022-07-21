@@ -1,7 +1,7 @@
 ######### global settings  #########
 GPU = True                                  # running on GPU is highly suggested
-TEST_MODE = True                           # turning on the testmode means the code will run on a small dataset.
-CLEAN = True                               # set to "True" if you want to clean the temporary large files after generating result
+TEST_MODE = False                            # turning on the testmode means the code will run on a small dataset.
+CLEAN = True                                # set to "True" if you want to clean the temporary large files after generating result
 MODEL = 'resnet18'                          # model arch: resnet18, alexnet, resnet50, densenet161
 DATASET = 'places365'                       # model trained on: places365 or imagenet
 QUANTILE = 0.005                            # the threshold used for activation
@@ -12,7 +12,7 @@ PARALLEL = 1                                # how many process is used for tally
 FO_AHEAD = 1                                # number of data items to prefetch ahead
 SINGLE_THREAD = False                        # use a single process in dataloader
 CATAGORIES = ["dynamic", "appearance","flow","color"] # concept categories that are chosen to detect: "dynamic", "appearance", "flow", "color"
-OUTPUT_FOLDER = "result/video_dtdb_pytorch_"+MODEL+"_"+DATASET # result will be stored in this folder
+OUTPUT_FOLDER = "result/video_a2d_"+MODEL+"_"+DATASET # result will be stored in this folder
 
 ########### sub settings ###########
 # In most of the case, you don't have to change them.
@@ -28,7 +28,7 @@ OUTPUT_FOLDER = "result/video_dtdb_pytorch_"+MODEL+"_"+DATASET # result will be 
 # INDEX_FILE: if you turn on the TEST_MODE, actually you should provide this file on your own
 
 if MODEL != 'alexnet':
-    DATA_DIRECTORY = 'dataset/video_broden2_224'
+    DATA_DIRECTORY = 'dataset/video_broden3_224'
     IMG_SIZE = 224
 else:
     # DATA_DIRECTORY = 'dataset/broden1_227'
@@ -58,15 +58,15 @@ elif MODEL == 'resnet50':
         MODEL_PARALLEL = False
 
 if TEST_MODE:
-    WORKERS = 4
-    BATCH_SIZE = 128
-    TALLY_BATCH_SIZE = 2
-    TALLY_AHEAD = 4
-    INDEX_FILE = 'index_dtdb.csv'
-    OUTPUT_FOLDER += "_test"
-else:
     WORKERS = 8
-    BATCH_SIZE = 128
+    BATCH_SIZE = 256
     TALLY_BATCH_SIZE = 16
     TALLY_AHEAD = 4
-    INDEX_FILE = 'index.csv'
+    INDEX_FILE = 'index_a2d.csv'
+    OUTPUT_FOLDER += "_test"
+else:
+    WORKERS = 16
+    BATCH_SIZE = 2048
+    TALLY_BATCH_SIZE = 24
+    TALLY_AHEAD = 8
+    INDEX_FILE = 'index_a2d.csv'
