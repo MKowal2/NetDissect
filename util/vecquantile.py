@@ -238,15 +238,11 @@ if __name__ == '__main__':
     amt = amount // depth
     for r in range(depth):
         numpy.random.shuffle(alldata[r*amt:r*amt+amt,r])
-    # data[::2] = data[-2::-2]
-    # numpy.random.shuffle(data)
     starttime = time.time()
     qc = QuantileVector(depth=depth, resolution=8 * 1024)
     qc.add(alldata)
     ro = qc.readout(1001)
     endtime = time.time()
-    # print 'ro', ro
-    # print ro - numpy.linspace(0, amount, percentiles+1)
     gt = numpy.linspace(0, amount, percentiles+1)[None,:] + (
             numpy.arange(qc.depth) * amount)[:,None]
     print("Maximum relative deviation among %d perentiles:" % percentiles, (

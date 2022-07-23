@@ -81,11 +81,12 @@ class SegmentationData(AbstractSegmentation):
     each have a separate c_*.csv file describing a dense coding of labels.
     '''
 
-    def __init__(self, directory, categories=None, require_all=False):
+    def __init__(self, directory, categories=None, require_all=False, video_input=False):
         directory = os.path.expanduser(directory)
         self.directory = directory
         with open(os.path.join(directory, settings.INDEX_FILE)) as f:
             self.image = [decode_index_dict(r) for r in csv.DictReader(f)]
+
         with open(os.path.join(directory, 'category.csv')) as f:
             self.category = OrderedDict()
             for row in csv.DictReader(f):
@@ -114,6 +115,13 @@ class SegmentationData(AbstractSegmentation):
                     c_data, key='code')
 
         self.labelcat = self.onehot(self.primary_categories_per_index())
+
+    def gather_videos(self):
+        '''
+        From a list of all images, convert to a list of all videos with every frame contained in every video
+        '''
+        video_dict = {}
+        return video_dict
 
     def primary_categories_per_index(ds):
         '''

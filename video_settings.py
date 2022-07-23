@@ -3,16 +3,24 @@ GPU = True                                  # running on GPU is highly suggested
 TEST_MODE = False                            # turning on the testmode means the code will run on a small dataset.
 CLEAN = True                                # set to "True" if you want to clean the temporary large files after generating result
 MODEL = 'resnet18'                          # model arch: resnet18, alexnet, resnet50, densenet161
-DATASET = 'places365'                       # model trained on: places365 or imagenet
+DATASET = 'imagenet'                        # model trained on: places365 or imagenet
+IMAGE_DATASETS = ['places365', 'imagenet']
 QUANTILE = 0.005                            # the threshold used for activation
 SEG_THRESHOLD = 0.04                        # the threshold used for visualization
 SCORE_THRESHOLD = 0.04                      # the threshold used for IoU score (in HTML file)
 TOPN = 10                                   # to show top N image with highest activation for each unit
 PARALLEL = 1                                # how many process is used for tallying (Experiments show that 1 is the fastest)
 FO_AHEAD = 1                                # number of data items to prefetch ahead
-SINGLE_THREAD = False                        # use a single process in dataloader
-CATAGORIES = ["dynamic", "appearance","flow","color"] # concept categories that are chosen to detect: "dynamic", "appearance", "flow", "color"
-OUTPUT_FOLDER = "result/video_a2d_"+MODEL+"_"+DATASET # result will be stored in this folder
+SINGLE_THREAD = True                        # use a single process in dataloader
+CATAGORIES = ["object", "part","scene","texture","color","material"] # concept categories that are chosen to detect: "object", "part", "scene", "material", "texture", "color"
+# CATAGORIES = ["dynamic", "appearance","flow","color"] # concept categories that are chosen to detect: "dynamic", "appearance", "flow", "color"
+# OUTPUT_FOLDER = "result/video_a2d_"+MODEL+"_"+DATASET # result will be stored in this folder
+# OUTPUT_FOLDER = "result/video_a2d_"+MODEL+"_"+DATASET # result will be stored in this folder
+OUTPUT_FOLDER = "result/PytorchLoader_"+MODEL+"_"+DATASET # result will be stored in this folder
+VIDEO_INPUT = True                         # model takes as input videos instead of images
+MEAN = [0.485, 0.456, 0.406]
+STD = [0.229, 0.224, 0.225]
+# MEAN = [109.5388, 118.6897, 124.6901] # previous mean
 
 ########### sub settings ###########
 # In most of the case, you don't have to change them.
@@ -28,7 +36,8 @@ OUTPUT_FOLDER = "result/video_a2d_"+MODEL+"_"+DATASET # result will be stored in
 # INDEX_FILE: if you turn on the TEST_MODE, actually you should provide this file on your own
 
 if MODEL != 'alexnet':
-    DATA_DIRECTORY = 'dataset/video_broden3_224'
+    # DATA_DIRECTORY = 'dataset/video_broden3_224'
+    DATA_DIRECTORY = 'dataset/broden1_224'
     IMG_SIZE = 224
 else:
     # DATA_DIRECTORY = 'dataset/broden1_227'
@@ -56,17 +65,20 @@ elif MODEL == 'resnet50':
     if DATASET == 'places365':
         MODEL_FILE = 'zoo/whole_resnet50_places365_python36.pth.tar'
         MODEL_PARALLEL = False
+elif MODEL == 'slowonly8x8':
+    FEATURE_NAMES = ['layer4']
+
 
 if TEST_MODE:
-    WORKERS = 8
-    BATCH_SIZE = 256
-    TALLY_BATCH_SIZE = 16
-    TALLY_AHEAD = 4
-    INDEX_FILE = 'index_a2d.csv'
+    WORKERS = 1
+    BATCH_SIZE = 4
+    TALLY_BATCH_SIZE = 1
+    TALLY_AHEAD = 1
+    INDEX_FILE = 'index.csv'
     OUTPUT_FOLDER += "_test"
 else:
     WORKERS = 16
-    BATCH_SIZE = 2048
+    BATCH_SIZE = 1024
     TALLY_BATCH_SIZE = 24
     TALLY_AHEAD = 8
-    INDEX_FILE = 'index_a2d.csv'
+    INDEX_FILE = 'index.csv'

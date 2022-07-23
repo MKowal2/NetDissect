@@ -12,6 +12,9 @@ import util.vecquantile as vecquantile
 import multiprocessing.pool as pool
 from loader.data_loader import load_csv
 from loader.data_loader import SegmentationData, SegmentationPrefetcher
+from loader.video_data_loader import VideoSegmentationData
+import torch.utils.data as data
+import torchvision.transforms as tf
 
 features_blobs = []
 def hook_feature(module, input, output):
@@ -23,11 +26,25 @@ class FeatureOperator:
     def __init__(self):
         if not os.path.exists(settings.OUTPUT_FOLDER):
             os.makedirs(os.path.join(settings.OUTPUT_FOLDER, 'image'))
-        self.data = SegmentationData(settings.DATA_DIRECTORY, categories=settings.CATAGORIES)
-        self.loader = SegmentationPrefetcher(self.data,categories=['image'],once=True,
-                                             batch_size=settings.BATCH_SIZE,ahead=settings.FO_AHEAD,
-                                             single_thread=settings.SINGLE_THREAD)
-        self.mean = [109.5388,118.6897,124.6901]
+
+        # define transform (no cropping needed, and must be deterministic)
+        transform = tf.Compose([tf.ToTensor(),
+                                tf.Normalize(settings.MEAN,settings.STD)])
+
+        if settings.VIDEO_INPUT:
+            self.data = VideoSegmentationData(settings.DATA_DIRECTORY, categories=settings.CATAGORIES, transform=transform)
+            self.loader = data.DataLoader(self.data, batch_size=settings.BATCH_SIZE, shuffle=False,
+                                          num_workers=settings.WORKERS, pin_memory=True)
+
+        else:
+            self.data = SegmentationData(settings.DATA_DIRECTORY, categories=settings.CATAGORIES, video_input=settings.VIDEO_INPUT)
+            self.loader = SegmentationPrefetcher(self.data,categories=['image'],once=True,
+                                                 batch_size=settings.BATCH_SIZE,ahead=settings.FO_AHEAD,
+                                                     single_thread=settings.SINGLE_THREAD)
+            pd = SegmentationPrefetcher(data, categories=data.category_names(),
+                                        once=True, batch_size=settings.TALLY_BATCH_SIZE,
+                                        ahead=settings.TALLY_AHEAD, start=start, end=end)
+        self.mean = settings.MEAN
 
     def feature_extraction(self, model=None, memmap=True):
         loader = self.loader
@@ -55,19 +72,24 @@ class FeatureOperator:
                     skip = False
             if skip:
                 return wholefeatures, maxfeatures
-        num_batches = (len(loader.indexes) + loader.batch_size - 1) / loader.batch_size
-        for batch_idx,batch in enumerate(loader.tensor_batches(bgr_mean=self.mean)):
-            del features_blobs[:]
-            input = batch[0]
-            batch_size = len(input)
-            print('extracting feature from batch %d / %d' % (batch_idx+1, num_batches))
-            input = torch.from_numpy(input[:, ::-1, :, :].copy())
-            input.div_(255.0 * 0.224)
-            if settings.GPU:
-                input = input.cuda()
-            input_var = V(input)
-            # input_var = V(input,volatile=True)
-            with torch.no_grad():
+        if settings.VIDEO_INPUT:
+            num_batches = int((len(loader.dataset.image) + loader.batch_size - 1) / loader.batch_size)
+        else:
+            num_batches = int((len(loader.indexes) + loader.batch_size - 1) / loader.batch_size)
+        with torch.no_grad():
+            for batch_idx,batch in enumerate(loader):
+                del features_blobs[:]
+                print('extracting feature from batch %d / %d' % (batch_idx+1, num_batches))
+                if not settings.VIDEO_INPUT:
+                    input = batch[0]
+                    input = torch.from_numpy(input[:, ::-1, :, :].copy())
+                    input.div_(255.0 * 0.224)
+                    if settings.GPU:
+                        input = input.cuda()
+                    input_var = V(input)
+                else:
+                    if settings.GPU:
+                        input_var = batch.cuda()
                 logit = model.forward(input_var)
                 while np.isnan(logit.data.cpu().max()):
                     print("nan") #which I have no idea why it will happen
@@ -76,7 +98,10 @@ class FeatureOperator:
                 if maxfeatures[0] is None:
                     # initialize the feature variable
                     for i, feat_batch in enumerate(features_blobs):
-                        size_features = (len(loader.indexes), feat_batch.shape[1])
+                        if settings.VIDEO_INPUT:
+                            size_features = (len(loader.dataset.image), feat_batch.shape[1])
+                        else:
+                            size_features = (len(loader.indexes), feat_batch.shape[1])
                         if memmap:
                             maxfeatures[i] = np.memmap(mmap_max_files[i],dtype=float,mode='w+',shape=size_features)
                         else:
@@ -84,8 +109,12 @@ class FeatureOperator:
                 if len(feat_batch.shape) == 4 and wholefeatures[0] is None:
                     # initialize the feature variable
                     for i, feat_batch in enumerate(features_blobs):
-                        size_features = (
-                        len(loader.indexes), feat_batch.shape[1], feat_batch.shape[2], feat_batch.shape[3])
+                        if settings.VIDEO_INPUT:
+                            size_features = (
+                                len(loader.dataset.image), feat_batch.shape[1], feat_batch.shape[2], feat_batch.shape[3])
+                        else:
+                            size_features = (
+                            len(loader.indexes), feat_batch.shape[1], feat_batch.shape[2], feat_batch.shape[3])
                         features_size[i] = size_features
                         if memmap:
                             wholefeatures[i] = np.memmap(mmap_files[i], dtype=float, mode='w+', shape=size_features)
@@ -93,7 +122,10 @@ class FeatureOperator:
                             wholefeatures[i] = np.zeros(size_features)
                 np.save(features_size_file, features_size)
                 start_idx = batch_idx*settings.BATCH_SIZE
-                end_idx = min((batch_idx+1)*settings.BATCH_SIZE, len(loader.indexes))
+                if settings.VIDEO_INPUT:
+                    end_idx = min((batch_idx+1)*settings.BATCH_SIZE, len(loader.dataset.image))
+                else:
+                    end_idx = min((batch_idx+1)*settings.BATCH_SIZE, len(loader.indexes))
                 for i, feat_batch in enumerate(features_blobs):
                     if len(feat_batch.shape) == 4:
                         # Write in feature (or max feature) to variable at proper index (start to end idx)
@@ -112,22 +144,15 @@ class FeatureOperator:
         if savepath and os.path.exists(qtpath):
             return np.load(qtpath)
         print("calculating quantile threshold")
-        # TODO: Understand this line
         quant = vecquantile.QuantileVector(depth=features.shape[1], seed=1)
-        start_time = time.time()
-        last_batch_time = start_time
         batch_size = 64
         for i in tqdm(range(0, features.shape[0], batch_size)):
-            batch_time = time.time()
-            rate = i / (batch_time - start_time + 1e-15)
-            batch_rate = batch_size / (batch_time - last_batch_time + 1e-15)
-            last_batch_time = batch_time
-            # print('Processing quantile index %d: %f %f' % (i, rate, batch_rate))
             batch = features[i:i + batch_size]
             batch = np.transpose(batch, axes=(0, 2, 3, 1)).reshape(-1, features.shape[1])
-            quant.add(batch)
+            quant.add(batch) # batch = (H*W*B x C)
         # TODO: Understand this line
         ret = quant.readout(1000)[:, int(1000 * (1-settings.QUANTILE)-1)]
+        # ret.shape = channels only... ?
         if savepath:
             np.save(qtpath, ret)
         return ret
@@ -139,9 +164,18 @@ class FeatureOperator:
         units = features.shape[1]
         size_RF = (settings.IMG_SIZE / features.shape[2], settings.IMG_SIZE / features.shape[3])
         fieldmap = ((0, 0), size_RF, size_RF)
-        pd = SegmentationPrefetcher(data, categories=data.category_names(),
-                                    once=True, batch_size=settings.TALLY_BATCH_SIZE,
-                                    ahead=settings.TALLY_AHEAD, start=start, end=end)
+
+        # todo: need to change to video as well
+        if settings.VIDEO_INPUT:
+            print('need to change to video')
+            exit()
+            pd = SegmentationPrefetcher(data, categories=data.category_names(),
+                                        once=True, batch_size=settings.TALLY_BATCH_SIZE,
+                                        ahead=settings.TALLY_AHEAD, start=start, end=end)
+        else:
+            pd = SegmentationPrefetcher(data, categories=data.category_names(),
+                                        once=True, batch_size=settings.TALLY_BATCH_SIZE,
+                                        ahead=settings.TALLY_AHEAD, start=start, end=end)
         count = start
         start_time = time.time()
         last_batch_time = start_time
