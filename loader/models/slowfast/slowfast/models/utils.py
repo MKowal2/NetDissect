@@ -1,6 +1,6 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.
 
-import slowfast.utils.logging as logging
+import loader.models.slowfast.slowfast.utils.logging as logging
 
 logger = logging.get_logger(__name__)
 

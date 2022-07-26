@@ -42,24 +42,25 @@ def load_csv(filename, readfields=None):
 class VideoSegmentationData(torch.utils.data.Dataset):
     """
     """
-    def __init__(self, directory, categories=None, require_all=False, transform=None):
+    def __init__(self, directory, categories=None, require_all=False, transform=None, seg_return=False):
         directory = os.path.expanduser(directory)
         self.directory = directory
-        if settings.DATASET in settings.IMAGE_DATASETS:
-            self.video_input = False
+        self.seg_return = seg_return
+        self.meta_categories = ['image', 'split', 'ih', 'iw', 'sh', 'sw']
+
+        self.video_input = False if settings.DATASET in settings.IMAGE_DATASETS else True
         self.transform = transform
         with open(os.path.join(directory, settings.INDEX_FILE)) as f:
             self.image = [self.decode_index_dict(r) for r in csv.DictReader(f)]
 
-        # self.videos = self.gather_videos()
-        # print('create self.video here')
+        self.video = self.generate_video_data()
         with open(os.path.join(directory, 'category.csv')) as f:
             self.category = OrderedDict()
             for row in csv.DictReader(f):
                 if categories and row['name'] in categories:
                     self.category[row['name']] = row
         categories = self.category.keys()
-        self.categories = categories
+        self.categories = list(self.category.keys())
         with open(os.path.join(directory, 'label.csv')) as f:
             label_data = [self.decode_label_dict(r) for r in csv.DictReader(f)]
         self.label = self.build_dense_label_array(label_data)
@@ -98,16 +99,45 @@ class VideoSegmentationData(torch.utils.data.Dataset):
         
         2. Normalize image with mean and std
         '''
-        data = self.image[index]
+
         if not self.video_input:
-            result = Image.open(os.path.join(self.root_dir, data['image']))
-            result = self.transform(result)
+            data = self.image[index]
+            if not self.seg_return:
+                result = Image.open(os.path.join(self.root_dir, data['image']))
+                result = self.transform(result)
+            else:
+                result, shape = self.resolve_segmentation(data, categories=self.categories)
+                # data = (j,
+                #           self.segmentation.__class__,
+                #           self.segmentation.metadata(j),
+                #           self.segmentation.filename(j),
+                #           self.categories,
+                #           self.segmentation_shape)
+                # j, typ, m, fn, categories, segmentation_shape = data
+                # if segmentation_shape is not None:
+                #     for k, v in segs.items():
+                #         segs[k] = scale_segmentation(v, segmentation_shape)
+                #     shape = segmentation_shape
+                # Some additional metadata to provide
+                result['sh'], result['sw'] = shape
+                result['i'] = index
+                result['fn'] = data['image']
+                if self.categories is None or 'image' in self.categories:
+                    img = Image.open(os.path.join(self.root_dir, data['image']))
+                    img = self.transform(img)
+                    result['image'] = img
+                # batch = {'color': ndarray(1x112x112) , 'scene': list(38), ...
+                # 'sh': 112, 'sw': 112, 'i': index, 'fn': 'path_to_img'}
         else:
-            print('implement video dataloader here')
-            print('should create self.image which is a list by each video')
-            print('Then iterate through each image and concatenate along batch dimension')
-            print('Another option is to generate this index file during the data generation process')
-            print('I.e., from join_data.py')
+            video_data = self.video[index]
+            result = []
+            for frame_data in video_data['frames']:
+                frame = Image.open(os.path.join(self.root_dir, frame_data['image']))
+                frame = self.transform(frame)
+                result.append(frame)
+
+            # stack video, shape of CxTxHxW
+            result = torch.stack(result, 1)
 
         return result
 
@@ -126,6 +156,35 @@ class VideoSegmentationData(torch.utils.data.Dataset):
         result[list(np.indices(arr.shape)) + [arr]] = 1
         return result
 
+    def generate_video_data(self):
+        '''Transform self.image into list-by-video format instead of by list-by-image format'''
+
+        video_dict = {}
+
+        for img in self.image:
+            video = img['image'].split('/')[1]
+            frame_idx = int(img['image'].split('.')[0][-5:])
+            if video not in video_dict.keys():
+                video_dict[video] = {'frames': [], 'start_frame': 100000, 'end_frame':0}
+
+            video_dict[video]['frames'].append(img)
+            if frame_idx < video_dict[video]['start_frame']:
+                video_dict[video]['start_frame'] = frame_idx
+            if frame_idx > video_dict[video]['end_frame']:
+                video_dict[video]['end_frame'] = frame_idx
+
+        video_data_list = []
+        for vid in video_dict:
+            # accomodate videos with sparsely labelled frames
+            if 'a2d' in video_dict[vid]['frames'][0]['image']:
+                labelled_idx = video_dict[vid]['start_frame']+32
+            else:
+                labelled_idx = None
+            data = {'video_id': vid, 'frames': video_dict[vid]['frames'], 'start_frame':video_dict[vid]['start_frame'],
+                    'end_frame': video_dict[vid]['end_frame'], 'label_idx': labelled_idx, 'root': video_dict[vid]['frames'][0]['image'][:-10]}
+            video_data_list.append(data)
+
+        return video_data_list
 
     def all_names(self, category, j):
         '''All English synonyms for the given label'''
@@ -151,18 +210,17 @@ class VideoSegmentationData(torch.utils.data.Dataset):
         '''Extract metadata for image i, For efficient data loading.'''
         return self.directory, self.image[i]
 
-    meta_categories = ['image', 'split', 'ih', 'iw', 'sh', 'sw']
 
-    @classmethod
-    def resolve_segmentation(cls, m, categories=None):
+
+    # @classmethod
+    def resolve_segmentation(self, row, categories=None):
         '''
         Resolves a full segmentation, potentially in a differenct process,
         for efficient multiprocess data loading.
         '''
-        directory, row = m
         result = {}
         for cat, d in row.items():
-            if cat in cls.meta_categories:
+            if cat in self.meta_categories:
                 continue
             if not wants(cat, categories):
                 continue
@@ -174,7 +232,7 @@ class VideoSegmentationData(torch.utils.data.Dataset):
                 if isinstance(channel, int):
                     out[i] = channel
                 else:
-                    rgb = imread(os.path.join(directory, 'images', channel))
+                    rgb = imread(os.path.join(self.directory, 'images', channel))
                     out[i] = rgb[:,:,0] + rgb[:,:,1] * 256
             result[cat] = out
         return result, (row['sh'], row['sw'])
@@ -370,6 +428,10 @@ def wants(what, option):
     if option is None:
         return True
     return what in option
+
+def seg_map_collate(batch):
+    # since we only want to deal with numpy arrays with variable sizes, we just return the list of dictionaries
+    return batch
 
 
 

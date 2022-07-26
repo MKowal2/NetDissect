@@ -12,8 +12,8 @@ import os
 import sys
 import simplejson
 
-import slowfast.utils.distributed as du
-from slowfast.utils.env import pathmgr
+import loader.models.slowfast.slowfast.utils.distributed as du
+from loader.models.slowfast.slowfast.utils.env import pathmgr
 
 
 def _suppress_print():

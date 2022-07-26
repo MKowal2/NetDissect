@@ -85,7 +85,6 @@ class Nonlocal(nn.Module):
         # Zero initializing the final convolution output.
         self.conv_out.zero_init = zero_init_final_conv
 
-        # TODO: change the name to `norm`
         self.bn = norm_module(
             num_features=self.dim,
             eps=self.norm_eps,

@@ -8,7 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.init import trunc_normal_
 
-from slowfast.models.common import DropPath, Mlp
+from loader.models.slowfast.slowfast.models.common import DropPath, Mlp
 
 
 def attention_pool(tensor, pool, thw_shape, has_cls_embed=True, norm=None):
@@ -507,7 +507,6 @@ class MultiScaleBlock(nn.Module):
         self.norm2 = norm_layer(att_dim)
         mlp_hidden_dim = int(att_dim * mlp_ratio)
         self.has_cls_embed = has_cls_embed
-        # TODO: check the use case for up_rate, and merge the following lines
         if up_rate is not None and up_rate > 1:
             mlp_dim_out = dim * up_rate
         else:

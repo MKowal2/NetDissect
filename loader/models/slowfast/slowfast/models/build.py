@@ -9,7 +9,7 @@ from torch.distributed.algorithms.ddp_comm_hooks import (
     default as comm_hooks_default,
 )
 
-import slowfast.utils.logging as logging
+import loader.models.slowfast.slowfast.utils.logging as logging
 
 logger = logging.get_logger(__name__)
 

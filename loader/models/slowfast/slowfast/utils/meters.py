@@ -704,7 +704,6 @@ class ValMeter(object):
             preds (tensor): model output predictions.
             labels (tensor): labels.
         """
-        # TODO: merge update_prediction with update_stats.
         self.all_preds.append(preds)
         self.all_labels.append(labels)
 

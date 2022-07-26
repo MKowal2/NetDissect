@@ -10,13 +10,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.init import trunc_normal_
 
-import slowfast.utils.weight_init_helper as init_helper
-from slowfast.models.attention import MultiScaleBlock
-from slowfast.models.batchnorm_helper import get_norm
-from slowfast.models.utils import (
-    round_width,
-    validate_checkpoint_wrapper_import,
-)
+import loader.models.slowfast.slowfast.utils.weight_init_helper as init_helper
+from loader.models.slowfast.slowfast.models.attention import MultiScaleBlock
+from loader.models.slowfast.slowfast.models.batchnorm_helper import get_norm
+from loader.models.slowfast.slowfast.models.utils import *
+# from loader.models.slowfast.slowfast.models.utils import (
+#     round_width,
+#     validate_checkpoint_wrapper_import,
+# )
 
 from . import head_helper, resnet_helper, stem_helper
 from .build import MODEL_REGISTRY

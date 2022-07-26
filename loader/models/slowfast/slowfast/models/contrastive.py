@@ -9,10 +9,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-import slowfast.models.losses as losses
-import slowfast.utils.distributed as du
-import slowfast.utils.logging as logging
-from slowfast.models.video_model_builder import X3D, MViT, ResNet, SlowFast
+import loader.models.slowfast.slowfast.models.losses as losses
+import loader.models.slowfast.slowfast.utils.distributed as du
+import loader.models.slowfast.slowfast.utils.logging as logging
+from loader.models.slowfast.slowfast.models.video_model_builder import X3D, MViT, ResNet, SlowFast
 
 from .build import MODEL_REGISTRY
 
@@ -267,7 +267,7 @@ class ContrastiveModel(nn.Module):
         ptr = int(self.ptr.item())
         if (
             not self.cfg.CONTRASTIVE.MOCO_MULTI_VIEW_QUEUE
-        ):  # TODO: add multiview negatives
+        ):
             keys_queue_update = [keys[0]]
         else:
             assert (

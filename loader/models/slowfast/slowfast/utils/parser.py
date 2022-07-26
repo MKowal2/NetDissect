@@ -6,8 +6,8 @@
 import argparse
 import sys
 
-import slowfast.utils.checkpoint as cu
-from slowfast.config.defaults import get_cfg
+import loader.models.slowfast.slowfast.utils.checkpoint as cu
+from loader.models.slowfast.slowfast.config.defaults import get_cfg
 
 
 def parse_args():

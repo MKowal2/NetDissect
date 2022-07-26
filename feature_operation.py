@@ -12,13 +12,17 @@ import util.vecquantile as vecquantile
 import multiprocessing.pool as pool
 from loader.data_loader import load_csv
 from loader.data_loader import SegmentationData, SegmentationPrefetcher
-from loader.video_data_loader import VideoSegmentationData
-import torch.utils.data as data
+from loader.video_data_loader import VideoSegmentationData, seg_map_collate
+import torch.utils.data
 import torchvision.transforms as tf
 
 features_blobs = []
 def hook_feature(module, input, output):
-    features_blobs.append(output.data.cpu().numpy())
+    if settings.VIDEO_INPUT:
+        # todo: modify to accept multistream
+        features_blobs.append(output[0].data.cpu().numpy())
+    else:
+        features_blobs.append(output.data.cpu().numpy())
 
 
 class FeatureOperator:
@@ -32,18 +36,22 @@ class FeatureOperator:
                                 tf.Normalize(settings.MEAN,settings.STD)])
 
         if settings.VIDEO_INPUT:
-            self.data = VideoSegmentationData(settings.DATA_DIRECTORY, categories=settings.CATAGORIES, transform=transform)
-            self.loader = data.DataLoader(self.data, batch_size=settings.BATCH_SIZE, shuffle=False,
+            if settings.SINGLE_THREAD:
+                settings.WORKERS = 0
+            self.data = VideoSegmentationData(settings.DATA_DIRECTORY, categories=settings.CATEGORIES, transform=transform)
+            self.loader = torch.utils.data.DataLoader(self.data, batch_size=settings.BATCH_SIZE, shuffle=False,
                                           num_workers=settings.WORKERS, pin_memory=True)
 
         else:
-            self.data = SegmentationData(settings.DATA_DIRECTORY, categories=settings.CATAGORIES, video_input=settings.VIDEO_INPUT)
-            self.loader = SegmentationPrefetcher(self.data,categories=['image'],once=True,
-                                                 batch_size=settings.BATCH_SIZE,ahead=settings.FO_AHEAD,
-                                                     single_thread=settings.SINGLE_THREAD)
-            pd = SegmentationPrefetcher(data, categories=data.category_names(),
-                                        once=True, batch_size=settings.TALLY_BATCH_SIZE,
-                                        ahead=settings.TALLY_AHEAD, start=start, end=end)
+            self.data = SegmentationData(settings.DATA_DIRECTORY, categories=settings.CATEGORIES, video_input=settings.VIDEO_INPUT)
+
+            self.loader = torch.utils.data.DataLoader(self.data, batch_size=settings.BATCH_SIZE, shuffle=False,
+                                                      num_workers=settings.WORKERS, pin_memory=True)
+            if settings.USE_OLD_LOADER:
+                self.loader = SegmentationPrefetcher(self.data,categories=['image'],once=True,
+                                                     batch_size=settings.BATCH_SIZE,ahead=settings.FO_AHEAD,
+                                                         single_thread=settings.SINGLE_THREAD)
+
         self.mean = settings.MEAN
 
     def feature_extraction(self, model=None, memmap=True):
@@ -72,15 +80,15 @@ class FeatureOperator:
                     skip = False
             if skip:
                 return wholefeatures, maxfeatures
-        if settings.VIDEO_INPUT:
-            num_batches = int((len(loader.dataset.image) + loader.batch_size - 1) / loader.batch_size)
-        else:
+        if settings.USE_OLD_LOADER:
             num_batches = int((len(loader.indexes) + loader.batch_size - 1) / loader.batch_size)
+        else:
+            num_batches = int((len(loader.dataset.image) + loader.batch_size - 1) / loader.batch_size)
         with torch.no_grad():
             for batch_idx,batch in enumerate(loader):
                 del features_blobs[:]
                 print('extracting feature from batch %d / %d' % (batch_idx+1, num_batches))
-                if not settings.VIDEO_INPUT:
+                if settings.USE_OLD_LOADER:
                     input = batch[0]
                     input = torch.from_numpy(input[:, ::-1, :, :].copy())
                     input.div_(255.0 * 0.224)
@@ -90,7 +98,8 @@ class FeatureOperator:
                 else:
                     if settings.GPU:
                         input_var = batch.cuda()
-                logit = model.forward(input_var)
+                if settings.VIDEO_INPUT:
+                    logit = model.forward([input_var])
                 while np.isnan(logit.data.cpu().max()):
                     print("nan") #which I have no idea why it will happen
                     del features_blobs[:]
@@ -155,6 +164,8 @@ class FeatureOperator:
         # ret.shape = channels only... ?
         if savepath:
             np.save(qtpath, ret)
+
+        # return thresholds which the maximum activation need to be greater than for statistical significance to hold
         return ret
         # return np.percentile(features,100*(1 - settings.QUANTILE),axis=axis)
 
@@ -165,28 +176,21 @@ class FeatureOperator:
         size_RF = (settings.IMG_SIZE / features.shape[2], settings.IMG_SIZE / features.shape[3])
         fieldmap = ((0, 0), size_RF, size_RF)
 
-        # todo: need to change to video as well
         if settings.VIDEO_INPUT:
-            print('need to change to video')
-            exit()
-            pd = SegmentationPrefetcher(data, categories=data.category_names(),
-                                        once=True, batch_size=settings.TALLY_BATCH_SIZE,
-                                        ahead=settings.TALLY_AHEAD, start=start, end=end)
+            data.seg_return = True
+            if settings.SINGLE_THREAD:
+                settings.WORKERS = 0
+            pd = torch.utils.data.DataLoader(data, batch_size=settings.BATCH_SIZE, shuffle=False,
+                                          num_workers=settings.WORKERS, pin_memory=True, collate_fn=seg_map_collate)
+
+
         else:
             pd = SegmentationPrefetcher(data, categories=data.category_names(),
                                         once=True, batch_size=settings.TALLY_BATCH_SIZE,
-                                        ahead=settings.TALLY_AHEAD, start=start, end=end)
+                                        ahead=settings.TALLY_AHEAD, start=start, end=end, single_thread=settings.SINGLE_THREAD)
         count = start
-        start_time = time.time()
-        last_batch_time = start_time
-        for batch in pd.batches():
-            batch_time = time.time()
-            rate = (count - start) / (batch_time - start_time + 1e-15)
-            batch_rate = len(batch) / (batch_time - last_batch_time + 1e-15)
-            last_batch_time = batch_time
-
-            print('labelprobe image index %d / %d, items per sec %.4f, %.4f' % (count, pd.indexes.stop, rate, batch_rate))
-
+        # for batch in pd.batches(): # if not video_input = True, don't know how to write this in as a for loop...
+        for batch_idx, batch in enumerate(tqdm(pd)):
             for concept_map in batch:
                 count += 1
                 img_index = concept_map['i']

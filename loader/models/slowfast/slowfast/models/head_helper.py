@@ -7,10 +7,10 @@ import torch
 import torch.nn as nn
 from detectron2.layers import ROIAlign
 
-from slowfast.models.batchnorm_helper import (
+from loader.models.slowfast.slowfast.models.batchnorm_helper import (
     NaiveSyncBatchNorm1d as NaiveSyncBatchNorm1d,
 )
-from slowfast.models.nonlocal_helper import Nonlocal
+# from loader.models.slowfast.slowfast.models.nonlocal_helper import Nonlocal
 
 
 class ResNetRoIHead(nn.Module):

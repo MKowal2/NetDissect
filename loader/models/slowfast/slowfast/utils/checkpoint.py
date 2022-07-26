@@ -10,10 +10,10 @@ import pickle
 from collections import OrderedDict
 import torch
 
-import slowfast.utils.distributed as du
-import slowfast.utils.logging as logging
-from slowfast.utils.c2_model_loading import get_name_convert_func
-from slowfast.utils.env import checkpoint_pathmgr as pathmgr
+import loader.models.slowfast.slowfast.utils.distributed as du
+import loader.models.slowfast.slowfast.utils.logging as logging
+from loader.models.slowfast.slowfast.utils.c2_model_loading import get_name_convert_func
+from loader.models.slowfast.slowfast.utils.env import checkpoint_pathmgr as pathmgr
 
 logger = logging.get_logger(__name__)
 

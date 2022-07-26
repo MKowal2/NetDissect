@@ -6,9 +6,9 @@
 import torch
 import torch.nn as nn
 
-from slowfast.models.common import drop_path
-from slowfast.models.nonlocal_helper import Nonlocal
-from slowfast.models.operators import SE, Swish
+from loader.models.slowfast.slowfast.models.common import drop_path
+from loader.models.slowfast.slowfast.models.nonlocal_helper import Nonlocal
+from loader.models.slowfast.slowfast.models.operators import SE, Swish
 
 
 def get_trans_func(name):
