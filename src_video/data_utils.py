@@ -7,8 +7,10 @@ import numpy
 import codecs
 import subprocess
 import time
+import torch
 from PIL import Image
 from scipy.ndimage.interpolation import zoom
+from torchvision.utils import flow_to_image
 
 def ensure_dir(targetdir):
     if not os.path.exists(targetdir):
@@ -86,6 +88,7 @@ def all_dataset_segmentations(data_sets, test_limit=None, debug=False):
     for all images in all the datasets.  The iterator iterates over
     (dataset_name, global_index, dataset_resolver, metadata(i))
     '''
+
     j = 0
     for name, ds in data_sets.items():
         total_imgs = ds.img_size()
@@ -288,7 +291,13 @@ def save_segmentation(seg, imagedir, dataset, filename, category, translation):
     shape = numpy.shape(seg)
     if len(shape) < 2:
         # Save numbers as decimal strings; and omit zero labels.
-        return ['%d' % translation[t] for t in (seg if len(shape) else [seg]) if t]
+        try:
+            ans = ['%d' % translation[t] for t in (seg if len(shape) else [seg]) if t]
+
+        except:
+            print('xxx')
+        return ans
+
 
     result = []
     for channel in ([()] if len(shape) == 2 else range(shape[0])):
@@ -314,6 +323,19 @@ def encodeRG(channel):
     result[:,:,0] = channel % 256
     result[:,:,1] = (channel // 256)
     return result
+
+
+def return_rgb_flow(img_path):
+    if 'a2d' in img_path:
+        flow_path = os.path.join('/home/m2kowal/data/a2d_dataset/frames', img_path.split('a2d/')[-1].replace('.jpg', '_flow.npy'))
+    elif 'dtdb' in img_path:
+        flow_path = os.path.join('/home/m2kowal/data/DTDB/frames', img_path.split('dtdb/')[-1].replace('.jpg', '_flow.npy'))
+
+    flow = numpy.load(flow_path)
+
+    flow = numpy.array(flow_to_image(torch.tensor(flow)).permute(1,2,0))
+    return flow
+
 
 
 README_TEXT= '''

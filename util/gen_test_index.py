@@ -8,9 +8,9 @@ to be in the smaller subset as well as the number of videos.
 '''
 
 
-dataset_path = 'dataset/video_broden3_224'
+dataset_path = 'dataset/A2D_video_broden4_224'
 index_file = 'index.csv'
-new_file_name = 'index_a2d.csv'
+new_file_name = 'index_sm.csv'
 
 def choose_dataset_subset(datasets, num_videos):
     '''
@@ -26,6 +26,15 @@ def choose_dataset_subset(datasets, num_videos):
         video_dict = {}
         for dataset in datasets:
             video_dict[dataset] = []
+
+        # # check for duplicates in index.csv
+        # check_list = []
+        # for x in reader:
+        #     if x in check_list:
+        #         print('Duplicate in new list:  ',x)
+        #     else:
+        #         check_list.append(x)
+
         for idx, row in enumerate(tqdm(reader)):
             if idx == 0:
                 new_csv_dict[datasets[0]].append(row)
@@ -43,9 +52,18 @@ def choose_dataset_subset(datasets, num_videos):
     new_csv_list = []
     for dataset in datasets:
         new_csv_list += new_csv_dict[dataset]
+
+
+    check_list = []
+    for x in new_csv_list:
+        if x in check_list:
+            print('Duplicate in new list:  ',x)
+        else:
+            check_list.append(x)
+
     with open(os.path.join(dataset_path, new_file_name), 'w') as f:
         writer = csv.writer(f)
         writer.writerows(new_csv_list)
 
 
-choose_dataset_subset(datasets=['a2d'],num_videos=100000)
+choose_dataset_subset(datasets=['a2d'],num_videos=100)

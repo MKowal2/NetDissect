@@ -34,23 +34,28 @@ class FeatureOperator:
         # define transform (no cropping needed, and must be deterministic)
         transform = tf.Compose([tf.ToTensor(),
                                 tf.Normalize(settings.MEAN,settings.STD)])
-
+        if settings.SINGLE_THREAD:
+            settings.WORKERS = 0
         if settings.VIDEO_INPUT:
-            if settings.SINGLE_THREAD:
-                settings.WORKERS = 0
             self.data = VideoSegmentationData(settings.DATA_DIRECTORY, categories=settings.CATEGORIES, transform=transform)
             self.loader = torch.utils.data.DataLoader(self.data, batch_size=settings.BATCH_SIZE, shuffle=False,
                                           num_workers=settings.WORKERS, pin_memory=True)
-
         else:
-            self.data = SegmentationData(settings.DATA_DIRECTORY, categories=settings.CATEGORIES, video_input=settings.VIDEO_INPUT)
-
-            self.loader = torch.utils.data.DataLoader(self.data, batch_size=settings.BATCH_SIZE, shuffle=False,
-                                                      num_workers=settings.WORKERS, pin_memory=True)
+            # self.data = SegmentationData(settings.DATA_DIRECTORY, categories=settings.CATEGORIES, video_input=settings.VIDEO_INPUT)
+            #
+            # self.loader = torch.utils.data.DataLoader(self.data, batch_size=settings.BATCH_SIZE, shuffle=False,
+            #                                           num_workers=settings.WORKERS, pin_memory=True)
             if settings.USE_OLD_LOADER:
+                self.data = SegmentationData(settings.DATA_DIRECTORY, categories=settings.CATEGORIES,
+                                             video_input=settings.VIDEO_INPUT)
                 self.loader = SegmentationPrefetcher(self.data,categories=['image'],once=True,
                                                      batch_size=settings.BATCH_SIZE,ahead=settings.FO_AHEAD,
                                                          single_thread=settings.SINGLE_THREAD)
+            else:
+                self.data = VideoSegmentationData(settings.DATA_DIRECTORY, categories=settings.CATEGORIES,
+                                                  transform=transform)
+                self.loader = torch.utils.data.DataLoader(self.data, batch_size=settings.BATCH_SIZE, shuffle=False,
+                                                          num_workers=settings.WORKERS, pin_memory=True)
 
         self.mean = settings.MEAN
 
@@ -83,7 +88,10 @@ class FeatureOperator:
         if settings.USE_OLD_LOADER:
             num_batches = int((len(loader.indexes) + loader.batch_size - 1) / loader.batch_size)
         else:
-            num_batches = int((len(loader.dataset.image) + loader.batch_size - 1) / loader.batch_size)
+            if settings.VIDEO_INPUT:
+                num_batches = int((len(loader.dataset.video) + loader.batch_size - 1) / loader.batch_size)
+            else:
+                num_batches = int((len(loader.dataset.image) + loader.batch_size - 1) / loader.batch_size)
         with torch.no_grad():
             for batch_idx,batch in enumerate(loader):
                 del features_blobs[:]
@@ -100,6 +108,8 @@ class FeatureOperator:
                         input_var = batch.cuda()
                 if settings.VIDEO_INPUT:
                     logit = model.forward([input_var])
+                else:
+                    logit = model.forward(input_var)
                 while np.isnan(logit.data.cpu().max()):
                     print("nan") #which I have no idea why it will happen
                     del features_blobs[:]
@@ -107,36 +117,64 @@ class FeatureOperator:
                 if maxfeatures[0] is None:
                     # initialize the feature variable
                     for i, feat_batch in enumerate(features_blobs):
-                        if settings.VIDEO_INPUT:
-                            size_features = (len(loader.dataset.image), feat_batch.shape[1])
+                        if not settings.USE_OLD_LOADER:
+                            if settings.VIDEO_INPUT:
+                                size_features = (len(loader.dataset.video), feat_batch.shape[1])
+                            else:
+                                size_features = (len(loader.dataset.image), feat_batch.shape[1])
                         else:
                             size_features = (len(loader.indexes), feat_batch.shape[1])
                         if memmap:
                             maxfeatures[i] = np.memmap(mmap_max_files[i],dtype=float,mode='w+',shape=size_features)
                         else:
                             maxfeatures[i] = np.zeros(size_features)
-                if len(feat_batch.shape) == 4 and wholefeatures[0] is None:
-                    # initialize the feature variable
-                    for i, feat_batch in enumerate(features_blobs):
-                        if settings.VIDEO_INPUT:
-                            size_features = (
-                                len(loader.dataset.image), feat_batch.shape[1], feat_batch.shape[2], feat_batch.shape[3])
-                        else:
-                            size_features = (
-                            len(loader.indexes), feat_batch.shape[1], feat_batch.shape[2], feat_batch.shape[3])
-                        features_size[i] = size_features
-                        if memmap:
-                            wholefeatures[i] = np.memmap(mmap_files[i], dtype=float, mode='w+', shape=size_features)
-                        else:
-                            wholefeatures[i] = np.zeros(size_features)
+                if wholefeatures[0] is None:
+                    if len(feat_batch.shape) == 4:
+                        # initialize the feature variable
+                        for i, feat_batch in enumerate(features_blobs):
+                            if not settings.USE_OLD_LOADER:
+                                size_features = (
+                                    len(loader.dataset.image), feat_batch.shape[1], feat_batch.shape[2], feat_batch.shape[3])
+                            else:
+                                size_features = (
+                                len(loader.indexes), feat_batch.shape[1], feat_batch.shape[2], feat_batch.shape[3])
+                            features_size[i] = size_features
+                            if memmap:
+                                wholefeatures[i] = np.memmap(mmap_files[i], dtype=float, mode='w+', shape=size_features)
+                            else:
+                                wholefeatures[i] = np.zeros(size_features)
+                    elif len(feat_batch.shape) == 5:
+                        # initialize the feature variable
+                        for i, feat_batch in enumerate(features_blobs):
+                            if not settings.USE_OLD_LOADER:
+                                size_features = (
+                                    len(loader.dataset.video), feat_batch.shape[1], feat_batch.shape[2], feat_batch.shape[3], feat_batch.shape[4])
+                            else:
+                                size_features = (
+                                len(loader.indexes), feat_batch.shape[1], feat_batch.shape[2], feat_batch.shape[3], feat_batch.shape[4])
+                            features_size[i] = size_features
+                            if memmap:
+                                wholefeatures[i] = np.memmap(mmap_files[i], dtype=float, mode='w+', shape=size_features)
+                            else:
+                                wholefeatures[i] = np.zeros(size_features)
                 np.save(features_size_file, features_size)
                 start_idx = batch_idx*settings.BATCH_SIZE
-                if settings.VIDEO_INPUT:
-                    end_idx = min((batch_idx+1)*settings.BATCH_SIZE, len(loader.dataset.image))
+                if not settings.USE_OLD_LOADER:
+                    if settings.VIDEO_INPUT:
+                        end_idx = min((batch_idx+1)*settings.BATCH_SIZE, len(loader.dataset.video))
+                    else:
+                        end_idx = min((batch_idx+1)*settings.BATCH_SIZE, len(loader.dataset.image))
                 else:
                     end_idx = min((batch_idx+1)*settings.BATCH_SIZE, len(loader.indexes))
                 for i, feat_batch in enumerate(features_blobs):
-                    if len(feat_batch.shape) == 4:
+
+                    if len(feat_batch.shape) == 5:
+                        wholefeatures[i][start_idx:end_idx] = feat_batch
+                        # slice
+                        maxfeatures[i][start_idx:end_idx] = np.max(np.max(feat_batch[:,:,int(feat_batch.shape[2]/2),:,:],3),2)
+                        # max without slicing
+                        # maxfeatures[i][start_idx:end_idx] = np.max(np.max(np.max(feat_batch, 4), 3), 2)
+                    elif len(feat_batch.shape) == 4:
                         # Write in feature (or max feature) to variable at proper index (start to end idx)
                         wholefeatures[i][start_idx:end_idx] = feat_batch
                         maxfeatures[i][start_idx:end_idx] = np.max(np.max(feat_batch,3),2)
@@ -157,7 +195,10 @@ class FeatureOperator:
         batch_size = 64
         for i in tqdm(range(0, features.shape[0], batch_size)):
             batch = features[i:i + batch_size]
-            batch = np.transpose(batch, axes=(0, 2, 3, 1)).reshape(-1, features.shape[1])
+            if settings.VIDEO_INPUT:
+                batch = np.transpose(batch, axes=(0, 2, 3, 4, 1)).reshape(-1, features.shape[1])
+            else:
+                batch = np.transpose(batch, axes=(0, 2, 3, 1)).reshape(-1, features.shape[1])
             quant.add(batch) # batch = (H*W*B x C)
         # TODO: Understand this line
         ret = quant.readout(1000)[:, int(1000 * (1-settings.QUANTILE)-1)]
@@ -216,7 +257,16 @@ class FeatureOperator:
                 for unit_id in range(units):
                     feature_map = features[img_index][unit_id]
                     if feature_map.max() > threshold[unit_id]:
-                        mask = imresize(feature_map, (concept_map['sh'], concept_map['sw']))
+                        if settings.VIDEO_INPUT:
+                            # take the temporal average
+                            # todo: make better than just taking average and compare to 2D label
+                            #  -> 3D iou with 3D feature map!
+                            if settings.VIDEO_MEAN:
+                                mask = imresize(feature_map.mean(0), (concept_map['sh'], concept_map['sw']))
+                            else:
+                                mask = imresize(feature_map[int(feature_map.shape[0]/2)], (concept_map['sh'], concept_map['sw']))
+                        else:
+                            mask = imresize(feature_map, (concept_map['sh'], concept_map['sw']))
                         # mask = imresize(feature_map, (concept_map['sh'], concept_map['sw']), mode='F')
                         #reduction = int(round(settings.IMG_SIZE / float(concept_map['sh'])))
                         #mask = upsample.upsampleL(fieldmap, feature_map, shape=(concept_map['sh'], concept_map['sw']), reduction=reduction)

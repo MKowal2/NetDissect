@@ -4,12 +4,12 @@ from functools import partial
 import codecs
 import csv
 from PIL import Image
-
-
+import random
+random.seed(0)
 
 def unify(data_sets, directory, size=None, segmentation_size=None, crop=False,
         splits=None, min_frequency=None, min_coverage=None, min_vid_frequency=None,
-        synonyms=None, test_limit=None, single_process=False, verbose=False, debug=False, num_threads=1):
+        synonyms=None, test_limit=None, single_process=False, verbose=False, debug=False, num_threads=1, args=None):
 
 
     # create directory
@@ -45,7 +45,7 @@ def unify(data_sets, directory, size=None, segmentation_size=None, crop=False,
     # Phase 5: Create normalized segmentation files
     create_segmentations(
             directory, data_sets, splits, assignments, size, segmentation_size,
-            crop, cats, test_limit, single_process, verbose)
+            crop, cats, test_limit, single_process, verbose, debug)
 
 
 def gather_label_statistics(data_sets, test_limit, single_process,
@@ -288,7 +288,7 @@ def write_label_files(
 
 
 def create_segmentations(directory, data_sets, splits, assignments, size,
-        segmentation_size, crop, cats, test_limit, single_process, verbose):
+        segmentation_size, crop, cats, test_limit, single_process, verbose, debug):
     '''
     Phase 5 of unification.  Create the normalized segmentation files
     '''
@@ -312,27 +312,69 @@ def create_segmentations(directory, data_sets, splits, assignments, size,
                 categories=cats,
                 crop=crop,
                 verbose=verbose),
-            all_dataset_segmentations(data_sets, test_limit),
+            all_dataset_segmentations(data_sets, test_limit, debug),
             single_process=single_process,
             verbose=verbose)
     # Sort nonempty items randomly+reproducibly by md5 hash of the filename.
-    ordered = sorted([(hashed_float(r['image']), r) for r in segmented if r])
+    ordered = [r for r in segmented if r]
+    random.shuffle(ordered)
+    # ordered = sorted([(hashed_float(r['image']), r) for r in segmented if r])
     # Assign splits, pullout out last 20% for validation.
     cutoffs = cumulative_splits(splits)
-    for floathash, record in ordered:
+    total_frames = len(ordered)
+    for i, record in enumerate(ordered):
         for name, cutoff in cutoffs:
-            if floathash <= cutoff:
+            if i <= total_frames*cutoff:
                 record['split'] = name
                 break
         else:
             assert False, 'hash %f exceeds last split %f' % (floathash, c)
+
+    # for floathash, record in ordered:
+    #     for name, cutoff in cutoffs:
+    #         if floathash <= cutoff:
+    #             record['split'] = name
+    #             break
+    #     else:
+    #         assert False, 'hash %f exceeds last split %f' % (floathash, c)
+
+    # used_hash = []
+    # duplicate_hash = []
+    # duplicate_data = []
+    # for data in ordered:
+    #     hash = data[0]
+    #     if hash in used_hash:
+    #         duplicate_hash.append(hash)
+    #         duplicate_data.append(data[1])
+    #     used_hash.append(hash)
+    #
+    # print('{} hashes collided!'.format(len(duplicate_hash)))
+
+
+    check_list = []
+    duplicate_list = []
+    for i, x in enumerate(ordered):
+        # if i == 100000:
+        #     break
+        if x['image'] in check_list:
+            duplicate_list.append(x['image'])
+        else:
+            check_list.append(x['image'])
+
+    print('{} duplicates found'.format(len(duplicate_list)))
+    for i, x in enumerate(duplicate_list):
+        print(x)
+        if i == 100:
+            break
 
     # Now write one row per image and one column per category
     with open(os.path.join(directory, 'index.csv'), 'w') as csvfile:
         fields = ['image', 'split', 'ih', 'iw', 'sh', 'sw'] + cats
         writer = csv.DictWriter(csvfile, fieldnames=fields)
         writer.writeheader()
-        for f, record in ordered:
+        # todo: determine where the DTDB duplicates come from in the variable `ordered'... so far it seems fine
+        for record in ordered:
+        # for f, record in ordered:
             writer.writerow(record)
 
 def translate_segmentation(record, directory, mapping, size,
@@ -374,6 +416,7 @@ def translate_segmentation(record, directory, mapping, size,
             'sh': segmentation_size[0],
             'sw': segmentation_size[1]
     }
+
     for cat in full_seg:
         if cat not in categories:
             continue  # skip categories with no data globally
@@ -435,6 +478,14 @@ if __name__ == '__main__':
             type=int, default=8,
             help='number of threads')
     parser.add_argument(
+            '--num_flow_dirs',
+            type=int, default=4,
+            help='number of flow directions (8 or 4)')
+    parser.add_argument(
+            '--num_flow_mags',
+            type=int, default=1,
+            help='number of flow mags (3 or 1)')
+    parser.add_argument(
             '--single_proc',
             action='store_true',
             help='Whether to use multi_proc')
@@ -453,21 +504,25 @@ if __name__ == '__main__':
     # categories = ['dynamics', 'data_processing']
     categories = ['dynamics', 'appearance', 'color', 'flow']
     # categories = ['color', 'flow']
+
+    # todo: fix duplicates in DTDB dataset
     dtdb = dtdb_dataset.DTDB(data_root='/home/m2kowal/data/DTDB',
                              categories=categories,
                              min_video_frame_length=128,
-                             center_crop=128)
+                             center_crop=64,
+                             args=args)
 
-    a2d = a2d_dataset.A2D(data_root='/home/m2kowal/data/a2d_dataset',
-                             categories=categories,
-                             min_video_frame_length=64,
-                             choose_ann_idx=0) # choose_ann_idx is the idx of the annotations to choos
+    # a2d = a2d_dataset.A2D(data_root='/home/m2kowal/data/a2d_dataset',
+    #                          categories=categories,
+    #                          min_video_frame_length=64,
+    #                          choose_ann_idx=0,args=args) # choose_ann_idx is the idx of the annotations to choos
 
 
 
 
-    data = OrderedDict(dtdb=dtdb, a2d=a2d)
+    # data = OrderedDict(dtdb=dtdb, a2d=a2d)
     # data = OrderedDict(a2d=a2d)
+    data = OrderedDict(dtdb=dtdb)
 
 
     # Debug settings
@@ -481,9 +536,9 @@ if __name__ == '__main__':
 
 
     # single_process = True
-    # debug = True
+    debug = True
 
-    directory = 'dataset/video_broden3_%d' % args.size
+    directory = 'dataset/DTDB_SINGLE_video_broden8_%d' % args.size
     unify(data,
             splits=OrderedDict(train=0.7, val=0.3),
             size=image_size, segmentation_size=seg_size,
@@ -495,4 +550,5 @@ if __name__ == '__main__':
             single_process=single_process,
             verbose=True,
             debug=debug,
-            num_threads=num_threads)
+            num_threads=num_threads,
+            args=args)

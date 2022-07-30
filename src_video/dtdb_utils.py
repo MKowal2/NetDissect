@@ -17,21 +17,9 @@ def get_vid_info(filename):
 
     return duration, frame_count, fps, (height, width)
 
-def get_img_info(dir):
-    frames = glob.glob(dir + '/*')
-    video = cv2.VideoCapture(dir)
+def gen_dtdb_json(data_path):
 
-    duration = video.get(cv2.CAP_PROP_POS_MSEC)
-    frame_count = video.get(cv2.CAP_PROP_FRAME_COUNT)
-    width = video.get(cv2.CAP_PROP_FRAME_WIDTH)
-    height = video.get(cv2.CAP_PROP_FRAME_HEIGHT)
-    fps = video.get(cv2.CAP_PROP_FPS)
-
-    return duration, frame_count, fps, (height, width)
-
-def gen_dtdb_json(data_path, use_img=True):
-
-
+    # vid_name_list = []
     # file locations
     data_root = data_path + '/'
     file_path =  data_root + 'Conversion_scripts/'
@@ -57,16 +45,24 @@ def gen_dtdb_json(data_path, use_img=True):
 
                 cls = dyn_label.split('_g')[0]
 
-                if not use_img:
-                    vid_path = data_root + 'BY_DYNAMIC_FINAL/' + dyn_subset_cap + '/' + cls + '/' + dyn_label
-                    duration, frame_count, fps, size = get_vid_info(vid_path)
-                else:
-                    vid_path = data_root + 'frames/' + dyn_label.split('.')[0]
-                    duration, frame_count, fps, size = get_img_info(vid_path)
+                vid_path = data_root + 'BY_DYNAMIC_FINAL/' + dyn_subset_cap + '/' + cls + '/' + dyn_label
+                duration, frame_count, fps, size = get_vid_info(vid_path)
+
                 if not os.path.exists(vid_path):
                     print('Video doesnt exist: {}'.format(vid_path))
                     continue
                 vid_dict[video_id] = {'duration': duration, 'frame_count': frame_count, 'fps':fps, 'size': size, 'dynamic': dyn_label, 'dyn_subset': dyn_subset}
+                # if dyn_label not in vid_name_list:
+                #     vid_name_list.append(dyn_label)
+                # else:
+                #     print(dyn_label)
+
+    # dup_list = []
+    # for vid in vid_name_list:
+    #     if vid in dup_list:
+    #         print("dup: {}".format(vid))
+    #     else:
+    #         dup_list.append(vid)
 
     #app second
     for file in app_files:

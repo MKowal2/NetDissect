@@ -5,8 +5,7 @@ import os
 import numpy as np
 import colorname
 import dtdb_utils
-from data_processing.bin_flow import bin_flow
-from data_processing.bin_flow import flow_names1
+from data_processing.bin_flow import *
 from loadseg import AbstractSegmentation
 from PIL import Image
 from tqdm import tqdm
@@ -49,6 +48,19 @@ def filter_videos(data_root, data, min_video_frame_length, center_crop):
     # filter out videos of length < min_video_frame_length
     num_removed_videos = 0
 
+
+    # check_list = []
+    # for x in data:
+    #     check_list.append(data[x]['dynamic'])
+    #
+    # check_list2 = []
+    # for x in tqdm(check_list):
+    #     if x in check_list2:
+    #         print('Duplicate in new list:  ', x)
+    #     else:
+    #         check_list2.append(x)
+
+
     if center_crop is not None:
         half_clip_length = int(center_crop/2)
 
@@ -56,7 +68,7 @@ def filter_videos(data_root, data, min_video_frame_length, center_crop):
         info = data[vid]
 
         # remove all examples without an appearance label
-        if 'appearance' in info.keys():
+        if 'appearance' in info.keys() and 'dynamic' in info.keys():
             paths = [os.path.join(data_root, 'frames', info['dynamic'][:-4]) + "/{:06d}.png".format(i) for i in list(range(1,int(info['frame_count'])))]
             length = len(paths)
             dyn_label = info['dynamic'].split('_g')[0]
@@ -70,20 +82,33 @@ def filter_videos(data_root, data, min_video_frame_length, center_crop):
                     start_frame_idx = middle_frame_idx - half_clip_length
                     end_frame_idx = middle_frame_idx + half_clip_length
                     for i in range(start_frame_idx, end_frame_idx):
-                        list_data.append({'path': paths[i], 'dynamic': dyn_label, 'appearance': app_label, 'video': paths[i].split('/')[-2]})
+                        # list_data.append({'path': paths[i], 'dynamic': dyn_label, 'appearance': app_label, 'video': paths[i].split('/')[-2]})
+                        list_data.append({'path': paths[i], 'dynamic': dyn_label, 'appearance': app_label, 'video': vid})
+
                         # list_data += paths[start_frame_idx:end_frame_idx]
                 else:
                     num_removed_videos += 1
             elif length > min_video_frame_length:
                 for path in paths:
-                    list_data.append({'path':path, 'dynamic': dyn_label, 'appearance':app_label, 'video':path.split('/')[-2]})
+                    list_data.append({'path':path, 'dynamic': dyn_label, 'appearance':app_label, 'video':vid})
             else:
                 num_removed_videos += 1
 
-        # Also remove items from original dictionary if they aren't in the list
+                # Also remove items from original dictionary if they aren't in the list
                 new_data.pop(vid)
         else:
+            # remove videos if they don't have an appearance label too
             new_data.pop(vid)
+
+    frame_list = []
+    for x in list_data:
+        frame_list.append(x['path'])
+    check_list = []
+    for x in tqdm(frame_list):
+        if x in check_list:
+            print('Duplicate in new list:  ',x)
+        else:
+            check_list.append(x)
 
     print('{} videos removed'.format(num_removed_videos))
     print('{} total frames'.format(len(list_data)))
@@ -93,11 +118,10 @@ def filter_videos(data_root, data, min_video_frame_length, center_crop):
 
 # class DTDB(data.Dataset):
 class DTDB(AbstractSegmentation):
-    def __init__(self, data_root, categories, min_video_frame_length=100,center_crop=128):
+    def __init__(self, data_root, categories, min_video_frame_length=100,center_crop=128, args=None):
         print('Creating DTDB Dataset...')
-        # need to replace this with datalist of all images, with corresponding styles and class labels
+        self.args = args
         self.data_root = data_root
-
         # data is a dict of all info, path_labels is list of all frames
         self.data = get_dtdb_data(self.data_root)
         self.path_labels, self.data = filter_videos(self.data_root, self.data, min_video_frame_length, center_crop)
@@ -106,6 +130,7 @@ class DTDB(AbstractSegmentation):
         self.dynamics_map = dict((t, i) for i, t in enumerate(self.dynamics))
         self.appearance_map = dict((t, i) for i, t in enumerate(self.appearances))
         self.categories = categories
+        self.flow_names = get_flow_names(args.num_flow_mags, args.num_flow_dirs)
 
     @classmethod
     def resolve_segmentation(cls, metadata, categories=None):
@@ -150,7 +175,7 @@ class DTDB(AbstractSegmentation):
         if category == 'color':
             return [colorname.color_names[j - 1] + '-c']
         if category == 'flow':
-            return [flow_names1[j] + '-f']
+            return [self.flow_names[j] + '-f']
         if category == 'dynamic':
             return [self.dynamics[j]]
         if category == 'appearance':

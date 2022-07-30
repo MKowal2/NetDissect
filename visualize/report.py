@@ -11,6 +11,7 @@ import visualize.expdir as expdir
 import visualize.bargraph as bargraph
 import video_settings as settings
 import numpy as np
+from src_video.data_utils import return_rgb_flow
 # unit,category,label,score
 
 replacements = [(re.compile(r[0]), r[1]) for r in [
@@ -93,8 +94,17 @@ def generate_html_summary(ds, layer, maxfeature=None, features=None, thresholds=
             for x, index in enumerate(top[unit]):
                 row = x // gridwidth
                 col = x % gridwidth
-                image = imread(ds.filename(index))
-                mask = imresize(features[index][unit], image.shape[:2])
+                if record['category'] == 'flow':
+                    image = return_rgb_flow(ds.filename(index))
+                else:
+                    image = imread(ds.filename(index))
+                if settings.VIDEO_INPUT:
+                    if settings.VIDEO_MEAN:
+                        mask = imresize(features[index][unit].mean(0), image.shape[:2])
+                    else:
+                        mask = imresize(features[index][unit][int(features.shape[2]/2)], image.shape[:2])
+                else:
+                    mask = imresize(features[index][unit], image.shape[:2])
                 # mask = imresize(features[index][unit], image.shape[:2], mode='F')
                 mask = mask > thresholds[unit]
                 vis = (mask[:, :, numpy.newaxis] * 0.8 + 0.2) * image

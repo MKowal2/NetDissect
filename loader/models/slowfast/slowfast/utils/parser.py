@@ -59,8 +59,8 @@ def parse_args():
         default=None,
         nargs=argparse.REMAINDER,
     )
-    if len(sys.argv) == 1:
-        parser.print_help()
+    # if len(sys.argv) == 1:
+    #     parser.print_help()
     return parser.parse_args()
 
 

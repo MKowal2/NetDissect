@@ -5,8 +5,7 @@ import os
 import numpy as np
 import colorname
 import dtdb_utils
-from data_processing.bin_flow import bin_flow
-from data_processing.bin_flow import flow_names1
+from data_processing.bin_flow import *
 from loadseg import AbstractSegmentation
 from PIL import Image
 import os.path
@@ -82,8 +81,9 @@ category_dict = {
 'dog-none':	79}
 
 class A2D(data.Dataset):
-    def __init__(self, data_root, categories, min_video_frame_length=64,choose_ann_idx=0):
+    def __init__(self, data_root, categories, min_video_frame_length=64,choose_ann_idx=0, args=None):
         print('Creating A2D Dataset...')
+        self.args = args
         self.data_root = data_root
         self.idx_action_dict = {y: x for x, y in category_dict.items()}
         self.appearances, self.dynamics = self._get_app_dyn()
@@ -91,6 +91,7 @@ class A2D(data.Dataset):
         self.appearance_map = dict((t, i) for i, t in enumerate(self.appearances))
         self.categories = categories
         self.path_labels, self.data = self.get_data(min_video_frame_length,choose_ann_idx)
+        self.flow_names= get_flow_names(args.num_flow_mags, args.num_flow_dirs)
         '''
         self.path_labels = [{path (to frames!): x, dynamic: x, appearance: x, video: x}, {}, ...]
         self.data = {OG_vid_id: {duration: x , frame_count: x, fps: x, size: [h, w], dynamic: x, appearance: x, subset: train}}
@@ -119,8 +120,8 @@ class A2D(data.Dataset):
 
             valid_ann_frames = []
             for ann in annotated_frames:
-                # check if there are 32 frames on either side of any of the frames
-                if (ann-0) > min_frame_half_count and (num_frames-ann) > min_frame_half_count:
+                # check if there are 32 frames on either side of any annotated frames
+                if (ann) > min_frame_half_count and (num_frames-ann) > min_frame_half_count:
                     valid_ann_frames.append(ann)
 
             # select the annotated frame if there are some
@@ -221,7 +222,7 @@ class A2D(data.Dataset):
         if category == 'color':
             return [colorname.color_names[j - 1] + '-c']
         if category == 'flow':
-            return [flow_names1[j] + '-f']
+            return [self.flow_names[j] + '-f']
         if category == 'dynamic':
             return [self.dynamics[j]]
         if category == 'appearance':

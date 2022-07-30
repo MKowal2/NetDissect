@@ -17,7 +17,10 @@ def convert(args):
         fps = data[vid_id]['fps']
         data_in_path = os.path.join(args.data_root) + '/BY_DYNAMIC_FINAL/' + data[vid_id]['dyn_subset'].upper() + '/' \
                        +data[vid_id]['dynamic'].split('_g')[0] + '/' + data[vid_id]['dynamic']
-        save_dir = data_out_path + '/' + data[vid_id]['dynamic'].split('.')[0]
+        save_dir = data_out_path + '/' + vid_id.split('.')[0]
+
+        # BAD SAVE FILE, COLLISIONS!
+        # save_dir = data_out_path + '/' + data[vid_id]['dynamic'].split('.')[0]
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
         command = 'ffmpeg -hide_banner -loglevel error -i "{}" -r {} -q:v 1 "{}/%06d.png"'.format(data_in_path, fps, save_dir)

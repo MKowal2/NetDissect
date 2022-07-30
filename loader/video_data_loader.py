@@ -53,7 +53,8 @@ class VideoSegmentationData(torch.utils.data.Dataset):
         with open(os.path.join(directory, settings.INDEX_FILE)) as f:
             self.image = [self.decode_index_dict(r) for r in csv.DictReader(f)]
 
-        self.video = self.generate_video_data()
+        if self.video_input:
+            self.video = self.generate_video_data()
         with open(os.path.join(directory, 'category.csv')) as f:
             self.category = OrderedDict()
             for row in csv.DictReader(f):
@@ -90,16 +91,6 @@ class VideoSegmentationData(torch.utils.data.Dataset):
         input: index
         output: result: C x (T) x W x H (T if self.video_input is True)
         """
-
-        '''
-        Steps
-        1. Get batch = [{'sh': 112, 'sw': 112, 'i': 4, 
-        'fn': 'dataset/broden1_224/images/ade20k/ADE_train_00003891.jpg', 
-        'image': Array([[[128,  91,  82],...]]])]
-        
-        2. Normalize image with mean and std
-        '''
-
         if not self.video_input:
             data = self.image[index]
             if not self.seg_return:
@@ -130,14 +121,38 @@ class VideoSegmentationData(torch.utils.data.Dataset):
                 # 'sh': 112, 'sw': 112, 'i': index, 'fn': 'path_to_img'}
         else:
             video_data = self.video[index]
-            result = []
-            for frame_data in video_data['frames']:
-                frame = Image.open(os.path.join(self.root_dir, frame_data['image']))
-                frame = self.transform(frame)
-                result.append(frame)
-
-            # stack video, shape of CxTxHxW
-            result = torch.stack(result, 1)
+            if not self.seg_return:
+                result = []
+                # need starting and ending frame of video to be sampled
+                for frame_idx in range(video_data['start_frame'], video_data['end_frame'], settings.SAMPLING_RATE):
+                    frame = Image.open(os.path.join(self.root_dir, video_data['root'])+ '/{:05d}.jpg'.format(frame_idx))
+                    frame = self.transform(frame)
+                    result.append(frame)
+                # stack video, shape of CxTxHxW
+                result = torch.stack(result, 1)
+            else:
+                result, shape = self.resolve_segmentation(video_data['label'], categories=self.categories)
+                # data = (j,
+                #           self.segmentation.__class__,
+                #           self.segmentation.metadata(j),
+                #           self.segmentation.filename(j),
+                #           self.categories,
+                #           self.segmentation_shape)
+                # j, typ, m, fn, categories, segmentation_shape = data
+                # if segmentation_shape is not None:
+                #     for k, v in segs.items():
+                #         segs[k] = scale_segmentation(v, segmentation_shape)
+                #     shape = segmentation_shape
+                # Some additional metadata to provide
+                result['sh'], result['sw'] = shape
+                result['i'] = index
+                result['fn'] = video_data['label']['image']
+                if self.categories is None or 'image' in self.categories:
+                    img = Image.open(os.path.join(self.root_dir, video_data['label']['image']))
+                    img = self.transform(img)
+                    result['image'] = img
+                # batch = {'color': ndarray(1x112x112) , 'scene': list(38), ...
+                # 'sh': 112, 'sw': 112, 'i': index, 'fn': 'path_to_img'}
 
         return result
 
@@ -178,10 +193,15 @@ class VideoSegmentationData(torch.utils.data.Dataset):
             # accomodate videos with sparsely labelled frames
             if 'a2d' in video_dict[vid]['frames'][0]['image']:
                 labelled_idx = video_dict[vid]['start_frame']+32
+                for frame in video_dict[vid]['frames']:
+                    if len(frame['dynamic']) > 0 and len(frame['appearance']) > 0:
+                        label = frame
             else:
-                labelled_idx = None
+                label = None
             data = {'video_id': vid, 'frames': video_dict[vid]['frames'], 'start_frame':video_dict[vid]['start_frame'],
-                    'end_frame': video_dict[vid]['end_frame'], 'label_idx': labelled_idx, 'root': video_dict[vid]['frames'][0]['image'][:-10]}
+                    'end_frame': video_dict[vid]['end_frame'], 'label': label, 'root': video_dict[vid]['frames'][0]['image'][:-10]}
+            # if not len(video_dict[vid]['frames']) == 64:
+            #     print(video_dict[vid]['frames'][0]['image'])
             video_data_list.append(data)
 
         return video_data_list
@@ -200,7 +220,11 @@ class VideoSegmentationData(torch.utils.data.Dataset):
 
     def filename(self, i):
         '''The filename of the ith jpeg (original image).'''
-        return os.path.join(self.directory, 'images', self.image[i]['image'])
+        if self.video_input:
+            y = os.path.join(self.directory, 'images', self.video[i]['label']['image'])
+        else:
+            y = os.path.join(self.directory, 'images', self.image[i]['image'])
+        return y
 
     def split(self, i):
         '''Which split contains item i.'''
@@ -215,7 +239,7 @@ class VideoSegmentationData(torch.utils.data.Dataset):
     # @classmethod
     def resolve_segmentation(self, row, categories=None):
         '''
-        Resolves a full segmentation, potentially in a differenct process,
+        Resolves a full segmentation, potentially in a different process,
         for efficient multiprocess data loading.
         '''
         result = {}
@@ -422,7 +446,8 @@ class VideoSegmentationData(torch.utils.data.Dataset):
         return numpy.array(self.category_map[category])
 
     def __len__(self):
-        return len(self.image)
+        y = len(self.video) if self.video_input else len(self.image)
+        return y
 
 def wants(what, option):
     if option is None:

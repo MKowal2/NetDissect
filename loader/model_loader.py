@@ -38,23 +38,39 @@ def load_video_model(settings):
     if settings.MODEL == 'slowonly8x8':
         model_args = parse_args()
         model_args.cfg_files = ['loader/models/slowfast/configs/Kinetics/c2/SLOW_8x8_R50.yaml']
-        cfg = load_config(model_args, 'loader/models/slowfast/configs/Kinetics/c2/SLOW_8x8_R50.yaml')
+        if settings.DATASET == 'kinetics':
+            cfg = load_config(model_args, 'loader/models/slowfast/configs/Kinetics/c2/SLOW_8x8_R50.yaml')
+            cfg.TRAIN.CHECKPOINT_FILE_PATH = 'zoo/SLOWONLY_8x8_R50.pkl'
+        elif settings.DATASET == 'ssv2':
+            cfg = load_config(model_args, 'loader/models/slowfast/configs/Kinetics/c2/SLOW_8x8_R50.yaml')
+            cfg.TRAIN.CHECKPOINT_TYPE = 'pytorch'
+            cfg.TRAIN.CHECKPOINT_FILE_PATH = 'zoo/SLOWONLY_8x8_ours_epoch_00030.pyth'
+            cfg.MODEL.NUM_CLASSES = settings.NUM_CLASSES
         cfg = assert_and_infer_cfg(cfg)
-
-        # if settings.DATASET == 'Diving48':
-        #     cfg.TEST.CHECKPOINT_TYPE = 'pytorch'
-        #     cfg.TEST.CHECKPOINT_FILE_PATH = 'models/ar_models/checkpoints/slowonly_8x8_2gpu_run1/checkpoint_epoch_00100.pyth'
-        #     cfg.MODEL.NUM_CLASSES = 48
-        #     if len(args.checkpoint) > 0:
-        #         cfg.TRAIN.CHECKPOINT_FILE_PATH = args.checkpoint
-        #         cfg.TEST.CHECKPOINT_FILE_PATH = args.checkpoint
-        #         cfg.TRAIN.CHECKPOINT_TYPE = 'pytorch'
-
         model = build_model(cfg)
-        cu.load_test_checkpoint(cfg, model)
-        settings.SAMPLING_RATE = cfg.DATA.SAMPLING_RATE
-        settings.NUM_FRAMES = cfg.DATA.NUM_FRAMES
+    elif settings.MODEL == 'c2d':
+        model_args = parse_args()
+        model_args.cfg_files = ['loader/models/slowfast/configs/Kinetics/C2D_8x8_R50_IN1K.yaml']
+        if settings.DATASET == 'kinetics':
+            cfg = load_config(model_args, 'loader/models/slowfast/configs/Kinetics/C2D_8x8_R50_IN1K.yaml')
+            cfg.TRAIN.CHECKPOINT_FILE_PATH = 'zoo/c2d_baseline_8x8_IN_pretrain_400k.pkl'
+            cfg.TRAIN.CHECKPOINT_TYPE = "caffe2"
+        cfg = assert_and_infer_cfg(cfg)
+        model = build_model(cfg)
+    elif settings.MODEL == 'i3d':
+        model_args = parse_args()
+        model_args.cfg_files = ['loader/models/slowfast/configs/Kinetics/c2/I3D_8x8_R50.yaml']
+        if settings.DATASET == 'kinetics':
+            cfg = load_config(model_args, 'loader/models/slowfast/configs/Kinetics/c2/I3D_8x8_R50.yaml')
+            cfg.TRAIN.CHECKPOINT_FILE_PATH = 'zoo/I3D_8x8_R50.pkl'
+        cfg = assert_and_infer_cfg(cfg)
+        model = build_model(cfg)
     else:
         print('Model selected not available')
         raise NotImplementedError
+
+    if not settings.RANDOM_INIT:
+        cu.load_test_checkpoint(cfg, model)
+    settings.SAMPLING_RATE = cfg.DATA.SAMPLING_RATE
+    settings.NUM_FRAMES = cfg.DATA.NUM_FRAMES
     return model
