@@ -29,7 +29,8 @@ no_flow_classes = [
 
 
 def get_dtdb_data(data_root):
-    correspondance_path = data_root + '/app_dyn_correspondance.json'
+    # correspondance_path = data_root + '/app_dyn_correspondance.json'
+    correspondance_path = data_root + '/app_dyn_correspondance_frames.json'
     if not os.path.exists(correspondance_path):
         dtdb_utils.gen_dtdb_json(data_root)
     with open(correspondance_path) as file:
@@ -69,7 +70,8 @@ def filter_videos(data_root, data, min_video_frame_length, center_crop):
 
         # remove all examples without an appearance label
         if 'appearance' in info.keys() and 'dynamic' in info.keys():
-            paths = [os.path.join(data_root, 'frames', info['dynamic'][:-4]) + "/{:06d}.png".format(i) for i in list(range(1,int(info['frame_count'])))]
+            paths = [os.path.join(data_root, 'frames', str(info['save_idx'])) + "/{:06d}.png".format(i) for i in list(range(1,int(info['frame_count'])))]
+            # paths = [os.path.join(data_root, 'frames', info['dynamic'][:-4]) + "/{:06d}.png".format(i) for i in list(range(1,int(info['frame_count'])))]
             length = len(paths)
             dyn_label = info['dynamic'].split('_g')[0]
             app_label = info['appearance'].split('_g')[0]
@@ -100,15 +102,15 @@ def filter_videos(data_root, data, min_video_frame_length, center_crop):
             # remove videos if they don't have an appearance label too
             new_data.pop(vid)
 
-    frame_list = []
-    for x in list_data:
-        frame_list.append(x['path'])
-    check_list = []
-    for x in tqdm(frame_list):
-        if x in check_list:
-            print('Duplicate in new list:  ',x)
-        else:
-            check_list.append(x)
+    # frame_list = []
+    # for x in list_data:
+    #     frame_list.append(x['path'])
+    # check_list = []
+    # for x in tqdm(frame_list):
+    #     if x in check_list:
+    #         print('Duplicate in new list:  ',x)
+    #     else:
+    #         check_list.append(x)
 
     print('{} videos removed'.format(num_removed_videos))
     print('{} total frames'.format(len(list_data)))

@@ -125,7 +125,11 @@ class VideoSegmentationData(torch.utils.data.Dataset):
                 result = []
                 # need starting and ending frame of video to be sampled
                 for frame_idx in range(video_data['start_frame'], video_data['end_frame'], settings.SAMPLING_RATE):
-                    frame = Image.open(os.path.join(self.root_dir, video_data['root'])+ '/{:05d}.jpg'.format(frame_idx))
+                    # todo: fix frame names in join_data.py
+                    if 'dtdb' in video_data['root']:
+                        frame = Image.open(os.path.join(self.root_dir, video_data['root'])+ '/{:06d}.jpg'.format(frame_idx))
+                    else:
+                        frame = Image.open(os.path.join(self.root_dir, video_data['root'])+ '/{:05d}.jpg'.format(frame_idx))
                     frame = self.transform(frame)
                     result.append(frame)
                 # stack video, shape of CxTxHxW

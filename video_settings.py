@@ -1,10 +1,11 @@
 ######### global settings  #########
+# todo: make into arguments and save when running
 GPU = True                                  # running on GPU is highly suggested
 SINGLE_THREAD = False                        # use a single process in dataloader
 TEST_MODE = False                            # turning on the testmode means the code will run on a small dataset.
 CLEAN = True                                # set to "True" if you want to clean the temporary large files after generating result
 VIDEO_INPUT = True                           # model takes as input videos instead of images
-MODEL = 'i3d'                                # model arch: resnet18, alexnet, resnet50, densenet161
+MODEL = 'c2d'                                # model arch: resnet18, alexnet, resnet50, densenet161
 DATASET = 'kinetics'                         # model trained on:
 # MODEL = 'resnet18'                          # model arch: resnet18, alexnet, resnet50, densenet161
 # DATASET = 'imagenet'                        # model trained on:
@@ -20,17 +21,16 @@ FO_AHEAD = 1                                # number of data items to prefetch a
 CATEGORIES = ["dynamic", "appearance","flow","color"] # concept categories that are chosen to detect: "dynamic", "appearance", "flow", "color"
 # OUTPUT_FOLDER = "result/video_a2d_"+MODEL+"_"+DATASET # result will be stored in this folder
 # OUTPUT_FOLDER = "result/video_a2d_"+MODEL+"_"+DATASET # result will be stored in this folder
-OUTPUT_FOLDER = "result/AllLayers_Full_A2D_"+MODEL+"_"+DATASET # result will be stored in this folder
+OUTPUT_FOLDER = "result/FullData_Flow2_"+MODEL+"_"+DATASET # result will be stored in this folder
 MEAN = [0.485, 0.456, 0.406]
 STD = [0.229, 0.224, 0.225]
 USE_OLD_LOADER = False
 VIDEO_MEAN = False
-RANDOM_INIT = True
+RANDOM_INIT = False
 
 if RANDOM_INIT:
     OUTPUT_FOLDER += "_RandWeight"
 
-# MEAN = [109.5388, 118.6897, 124.6901] # previous mean
 
 ########### sub settings ###########
 # In most of the case, you don't have to change them.
@@ -46,7 +46,9 @@ if RANDOM_INIT:
 # INDEX_FILE: if you turn on the TEST_MODE, actually you should provide this file on your own
 
 if VIDEO_INPUT:
-    DATA_DIRECTORY = 'dataset/A2D_video_broden4_224'
+    # DATA_DIRECTORY = 'dataset/A2D_video_broden4_224'
+    DATA_DIRECTORY = 'dataset/Full_video_broden10_224'
+    # DATA_DIRECTORY = 'dataset/A2D_Flow1_video_broden9_224'
     IMG_SIZE = 224
 else:
     if MODEL != 'alexnet':
@@ -69,7 +71,7 @@ if VIDEO_INPUT:
         FEATURE_NAMES = ['s1', 's2','s3','s4','s5']
         MIDDLE_FRAME = 2
     elif MODEL == 'c2d':
-        FEATURE_NAMES = ['s5']
+        FEATURE_NAMES = ['s1', 's2','s3','s4','s5']
         MIDDLE_FRAME = 2
 else:
     if DATASET == 'places365':

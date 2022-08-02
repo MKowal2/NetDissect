@@ -98,7 +98,7 @@ def all_dataset_segmentations(data_sets, test_limit=None, debug=False):
             if j % 10000 == 0:
                 print('{}/{} Completed'.format(j, total_imgs))
             if debug:
-                if j > 100:
+                if j > 2000:
                     break
 
 def truncate_range(data, limit):

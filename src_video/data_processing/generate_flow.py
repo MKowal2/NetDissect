@@ -73,11 +73,11 @@ if __name__ == '__main__':
             help='pixel size for output videos')
     parser.add_argument(
             '--batch_size',
-            type=int, default=1,
+            type=int, default=6,
             help='batch size for data loader')
     parser.add_argument(
             '--num_workers',
-            type=int, default=0,
+            type=int, default=12,
             help='cpu threads')
     parser.add_argument(
         '--dataset',

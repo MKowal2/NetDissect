@@ -316,27 +316,18 @@ def create_segmentations(directory, data_sets, splits, assignments, size,
             single_process=single_process,
             verbose=verbose)
     # Sort nonempty items randomly+reproducibly by md5 hash of the filename.
-    ordered = [r for r in segmented if r]
-    random.shuffle(ordered)
-    # ordered = sorted([(hashed_float(r['image']), r) for r in segmented if r])
+    ordered = sorted([(hashed_float(r['image']), r) for r in segmented if r])
     # Assign splits, pullout out last 20% for validation.
     cutoffs = cumulative_splits(splits)
     total_frames = len(ordered)
-    for i, record in enumerate(ordered):
+
+    for floathash, record in ordered:
         for name, cutoff in cutoffs:
-            if i <= total_frames*cutoff:
+            if floathash <= cutoff:
                 record['split'] = name
                 break
         else:
             assert False, 'hash %f exceeds last split %f' % (floathash, c)
-
-    # for floathash, record in ordered:
-    #     for name, cutoff in cutoffs:
-    #         if floathash <= cutoff:
-    #             record['split'] = name
-    #             break
-    #     else:
-    #         assert False, 'hash %f exceeds last split %f' % (floathash, c)
 
     # used_hash = []
     # duplicate_hash = []
@@ -351,30 +342,29 @@ def create_segmentations(directory, data_sets, splits, assignments, size,
     # print('{} hashes collided!'.format(len(duplicate_hash)))
 
 
-    check_list = []
-    duplicate_list = []
-    for i, x in enumerate(ordered):
-        # if i == 100000:
-        #     break
-        if x['image'] in check_list:
-            duplicate_list.append(x['image'])
-        else:
-            check_list.append(x['image'])
-
-    print('{} duplicates found'.format(len(duplicate_list)))
-    for i, x in enumerate(duplicate_list):
-        print(x)
-        if i == 100:
-            break
+    # check_list = []
+    # duplicate_list = []
+    # for i, x in enumerate(ordered):
+    #     # if i == 100000:
+    #     #     break
+    #     if x['image'] in check_list:
+    #         duplicate_list.append(x['image'])
+    #     else:
+    #         check_list.append(x['image'])
+    #
+    # print('{} duplicates found'.format(len(duplicate_list)))
+    # for i, x in enumerate(duplicate_list):
+    #     print(x)
+    #     if i == 100:
+    #         break
 
     # Now write one row per image and one column per category
     with open(os.path.join(directory, 'index.csv'), 'w') as csvfile:
         fields = ['image', 'split', 'ih', 'iw', 'sh', 'sw'] + cats
         writer = csv.DictWriter(csvfile, fieldnames=fields)
         writer.writeheader()
-        # todo: determine where the DTDB duplicates come from in the variable `ordered'... so far it seems fine
-        for record in ordered:
-        # for f, record in ordered:
+        # for record in ordered:
+        for f, record in ordered:
             writer.writerow(record)
 
 def translate_segmentation(record, directory, mapping, size,
@@ -475,7 +465,7 @@ if __name__ == '__main__':
             help='minimum number of videos touched by each label to keep label')
     parser.add_argument(
             '--num_threads',
-            type=int, default=8,
+            type=int, default=24,
             help='number of threads')
     parser.add_argument(
             '--num_flow_dirs',
@@ -483,8 +473,8 @@ if __name__ == '__main__':
             help='number of flow directions (8 or 4)')
     parser.add_argument(
             '--num_flow_mags',
-            type=int, default=1,
-            help='number of flow mags (3 or 1)')
+            type=int, default=2,
+            help='number of flow mags (3, 2 or 1)')
     parser.add_argument(
             '--single_proc',
             action='store_true',
@@ -512,17 +502,17 @@ if __name__ == '__main__':
                              center_crop=64,
                              args=args)
 
-    # a2d = a2d_dataset.A2D(data_root='/home/m2kowal/data/a2d_dataset',
-    #                          categories=categories,
-    #                          min_video_frame_length=64,
-    #                          choose_ann_idx=0,args=args) # choose_ann_idx is the idx of the annotations to choos
+    a2d = a2d_dataset.A2D(data_root='/home/m2kowal/data/a2d_dataset',
+                             categories=categories,
+                             min_video_frame_length=64,
+                             choose_ann_idx=0,args=args) # choose_ann_idx is the idx of the annotations to choos
 
 
 
 
-    # data = OrderedDict(dtdb=dtdb, a2d=a2d)
+    data = OrderedDict(dtdb=dtdb, a2d=a2d)
     # data = OrderedDict(a2d=a2d)
-    data = OrderedDict(dtdb=dtdb)
+    # data = OrderedDict(dtdb=dtdb)
 
 
     # Debug settings
@@ -536,9 +526,9 @@ if __name__ == '__main__':
 
 
     # single_process = True
-    debug = True
+    # debug = True
 
-    directory = 'dataset/DTDB_SINGLE_video_broden8_%d' % args.size
+    directory = 'dataset/Full_video_broden10_%d' % args.size
     unify(data,
             splits=OrderedDict(train=0.7, val=0.3),
             size=image_size, segmentation_size=seg_size,

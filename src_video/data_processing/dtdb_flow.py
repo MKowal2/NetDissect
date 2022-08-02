@@ -61,9 +61,6 @@ class DTDB(data.Dataset):
                 data.append({'video_id': vid_path,
                              'frame1': frame1_path,
                              'frame2': frame2_path})
-            # if i == 20:
-            #     break
-
         return data
 
     def __getitem__(self, i):
